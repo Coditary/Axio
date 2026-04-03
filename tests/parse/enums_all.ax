@@ -1,0 +1,35 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+enum Color() {
+    Red,
+    Green,
+    Blue,
+}
+
+enum Test(para1 int, para2 int) {
+    A(int, int),
+    B(int, int),
+}
+
+enum ActorState as Flags {
+    IsAlive,
+    Team as Flag {
+        Neutral,
+        Red,
+        Blue,
+        Green,
+    },
+    Mode {
+        Idle,
+        Attack,
+    },
+    IsVisible,
+}
+
+// CHECK: Enum Color
+// CHECK: Element Red
+// CHECK: Enum Test
+// CHECK: Element A
+// CHECK: Enum ActorState as Flags
+// CHECK: Element Team as Flag
+// CHECK: Element Mode

@@ -1,0 +1,14 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+enum Color() {
+    Red,
+    Green,
+    Blue,
+}
+
+fn main() int {
+    return Color.Green
+}
+
+// CHECK: ret i32 1

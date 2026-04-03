@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+struct Vec3 {
+    x int = 0
+    y int = 0
+    z int = 0
+}
+
+struct Header align(64) {
+    kind int bits 3
+    flags int bits 5
+}
+
+fn main() int {
+    let v Vec3 = Vec3(1, 2, 3)
+    return 0
+}
+
+// CHECK: Struct Vec3
+// CHECK: Field x:int
+// CHECK: Struct Header
+// CHECK: Field kind:int bits 3
+// CHECK: Field flags:int bits 5

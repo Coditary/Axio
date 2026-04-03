@@ -1,0 +1,8 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let value bool = true
+    return 0
+}
+
+// CHECK: Bool true

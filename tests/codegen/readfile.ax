@@ -1,0 +1,11 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+extern fn puts(text str) int;
+
+fn main() int {
+    puts($readfile("../examples/assets/banner.txt"))
+    return 0
+}
+
+// CHECK: Axio says hello from embedded compile-time data.

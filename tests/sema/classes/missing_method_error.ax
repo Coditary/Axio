@@ -1,0 +1,13 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class User {
+    name str
+}
+
+fn main() int {
+    let user = User()
+    user.greet()
+    return 0
+}
+
+// CHECK: error: class 'User' has no method 'greet'

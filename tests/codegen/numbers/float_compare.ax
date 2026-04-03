@@ -1,0 +1,8 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() bool {
+    return 1.5 < 2.5
+}
+
+// CHECK: fcmp olt

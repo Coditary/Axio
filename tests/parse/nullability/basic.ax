@@ -1,0 +1,13 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let ptr Obj = null
+    if ptr? {
+        ptr?.call()
+    }
+    return 0
+}
+
+// CHECK: Let ptr:Obj
+// CHECK: Unary
+// CHECK: Call

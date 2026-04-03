@@ -1,0 +1,8 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class User {
+    name str
+    print str => print + name
+}
+
+// CHECK: error: dynamic class fields cannot directly reference themselves

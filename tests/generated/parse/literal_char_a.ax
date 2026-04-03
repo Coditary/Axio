@@ -1,0 +1,8 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let value char = 'a'
+    return 0
+}
+
+// CHECK: Char

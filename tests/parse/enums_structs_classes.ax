@@ -1,0 +1,27 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+struct Header align(64) {
+    kind int bits 3
+    flags int bits 5
+}
+
+enum ActorState as Flags {
+    IsAlive,
+    Team as Flag {
+        Neutral,
+        Red,
+    },
+    IsVisible,
+}
+
+class Msg {
+    msg str
+    print str => "Hallo" + msg
+}
+
+// CHECK: Struct Header
+// CHECK: Field kind:int bits 3
+// CHECK: Enum ActorState as Flags
+// CHECK: Element Team as Flag
+// CHECK: Class Msg
+// CHECK: Member print:str

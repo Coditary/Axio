@@ -1,0 +1,12 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+class Box {
+    value int
+}
+
+fn main() int {
+    let ptr Box = new Box()
+    return ptr.value
+}
+
+// CHECK: warning: member access may dereference a nullable value; use '?.' or guard it with 'if value?'

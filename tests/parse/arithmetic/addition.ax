@@ -1,0 +1,9 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let result int = 1 + 2
+    return result
+}
+
+// CHECK: Let result:int
+// CHECK: Binary

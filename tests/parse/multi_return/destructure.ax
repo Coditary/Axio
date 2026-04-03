@@ -1,0 +1,13 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn pair() (int, int) {
+    return 1, 2
+}
+
+fn main() int {
+    let a int, b int = pair()
+    return a + b
+}
+
+// CHECK: Let a:int, b:int
+// CHECK: Call

@@ -1,0 +1,11 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn main(src ref Obj) int {
+    let copy Obj = src
+    return 0
+}
+
+// CHECK: error: ref values cannot be stored in owning or value bindings

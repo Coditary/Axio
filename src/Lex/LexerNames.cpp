@@ -1,0 +1,103 @@
+#include "axc/Lex/Token.h"
+
+namespace axc {
+
+const char* tokenKindName(TokenKind kind) {
+    switch (kind) {
+        case TokenKind::EndOfFile: return "end of file";
+        case TokenKind::Newline: return "newline";
+        case TokenKind::Identifier: return "identifier";
+        case TokenKind::IntegerLiteral: return "integer literal";
+        case TokenKind::FloatLiteral: return "float literal";
+        case TokenKind::CharLiteral: return "char literal";
+        case TokenKind::StringLiteral: return "string literal";
+        case TokenKind::DialectBlock: return "dialect block";
+        case TokenKind::KwFn: return "fn";
+        case TokenKind::KwLet: return "let";
+        case TokenKind::KwReturn: return "return";
+        case TokenKind::KwStruct: return "struct";
+        case TokenKind::KwEnum: return "enum";
+        case TokenKind::KwClass: return "class";
+        case TokenKind::KwImport: return "import";
+        case TokenKind::KwIf: return "if";
+        case TokenKind::KwElse: return "else";
+        case TokenKind::KwIn: return "in";
+        case TokenKind::KwAs: return "as";
+        case TokenKind::KwFlags: return "Flags";
+        case TokenKind::KwFlag: return "Flag";
+        case TokenKind::KwNew: return "new";
+        case TokenKind::KwWeak: return "weak";
+        case TokenKind::KwRef: return "ref";
+        case TokenKind::KwNull: return "null";
+        case TokenKind::KwExtern: return "extern";
+        case TokenKind::KwAlign: return "align";
+        case TokenKind::KwBits: return "bits";
+        case TokenKind::KwInt: return "int";
+        case TokenKind::KwVoid: return "void";
+        case TokenKind::KwStr: return "str";
+        case TokenKind::KwError: return "error";
+        case TokenKind::KwBool: return "bool";
+        case TokenKind::KwTrue: return "true";
+        case TokenKind::KwFalse: return "false";
+        case TokenKind::KwI2: return "i2";
+        case TokenKind::KwI8: return "i8";
+        case TokenKind::KwI16: return "i16";
+        case TokenKind::KwI32: return "i32";
+        case TokenKind::KwI64: return "i64";
+        case TokenKind::KwU8: return "u8";
+        case TokenKind::KwU16: return "u16";
+        case TokenKind::KwU32: return "u32";
+        case TokenKind::KwU64: return "u64";
+        case TokenKind::KwShort: return "short";
+        case TokenKind::KwLong: return "long";
+        case TokenKind::KwDouble: return "double";
+        case TokenKind::KwFloat: return "float";
+        case TokenKind::KwF8: return "f8";
+        case TokenKind::KwF16: return "f16";
+        case TokenKind::KwF32: return "f32";
+        case TokenKind::KwF64: return "f64";
+        case TokenKind::KwChar: return "char";
+        case TokenKind::LParen: return "(";
+        case TokenKind::RParen: return ")";
+        case TokenKind::LBrace: return "{";
+        case TokenKind::RBrace: return "}";
+        case TokenKind::LBracket: return "[";
+        case TokenKind::RBracket: return "]";
+        case TokenKind::Comma: return ",";
+        case TokenKind::Semicolon: return ";";
+        case TokenKind::Dot: return ".";
+        case TokenKind::At: return "@";
+        case TokenKind::Hash: return "#";
+        case TokenKind::Dollar: return "$";
+        case TokenKind::Question: return "?";
+        case TokenKind::QuestionDot: return "?.";
+        case TokenKind::Equal: return "=";
+        case TokenKind::EqualEqual: return "==";
+        case TokenKind::Bang: return "!";
+        case TokenKind::BangEqual: return "!=";
+        case TokenKind::Less: return "<";
+        case TokenKind::LessEqual: return "<=";
+        case TokenKind::Greater: return ">";
+        case TokenKind::GreaterEqual: return ">=";
+        case TokenKind::Ampersand: return "&";
+        case TokenKind::AmpAmp: return "&&";
+        case TokenKind::Pipe: return "|";
+        case TokenKind::PipePipe: return "||";
+        case TokenKind::Caret: return "^";
+        case TokenKind::Tilde: return "~";
+        case TokenKind::Plus: return "+";
+        case TokenKind::Minus: return "-";
+        case TokenKind::Star: return "*";
+        case TokenKind::Slash: return "/";
+        case TokenKind::Percent: return "%";
+        case TokenKind::ShiftLeft: return "<<";
+        case TokenKind::ShiftRight: return ">>";
+        case TokenKind::Arrow: return "->";
+        case TokenKind::Range: return "..";
+        case TokenKind::RangeInclusive: return "..=";
+        case TokenKind::FatArrow: return "=>";
+    }
+    return "token";
+}
+
+}  // namespace axc

@@ -1,0 +1,16 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() int {
+    let x int = 3
+    if x > 2 {
+        return 1
+    } else {
+        return 0
+    }
+}
+
+// CHECK: br i1
+// CHECK: if.then
+// CHECK: if.else
+// CHECK: if.end

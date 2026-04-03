@@ -1,0 +1,8 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+fn main() int {
+    let values i32[8]
+    return 0
+}
+
+// CHECK-NOT: error:

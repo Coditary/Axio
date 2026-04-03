@@ -1,0 +1,16 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let a f64 = 1.5
+    let b bool = true
+    let c bool = false
+    let d char = 'x'
+    let e = [1, 2, 3]
+    return 0
+}
+
+// CHECK: Float 1.5
+// CHECK: Bool true
+// CHECK: Bool false
+// CHECK: Char
+// CHECK: Init []

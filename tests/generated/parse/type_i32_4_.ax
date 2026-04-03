@@ -1,0 +1,7 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main(value i32[4]) int {
+    return 0
+}
+
+// CHECK: Param value:i32[4]

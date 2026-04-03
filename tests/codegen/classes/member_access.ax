@@ -1,0 +1,14 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+class User {
+    age int
+}
+
+fn main() int {
+    let user = User(7)
+    return user.age
+}
+
+// CHECK: getelementptr inbounds %User
+// CHECK: load i32

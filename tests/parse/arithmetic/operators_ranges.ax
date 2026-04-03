@@ -1,0 +1,29 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let a int = 1 + 2 * 3 - 4 / 2 % 2
+    let b int = (a & 7) | (a ^ 3)
+    let c int = ~b
+    let d int = (c << 1) >> 1
+
+    if a < b >= 5 != 9 < d {
+        return 1
+    }
+
+    if d in 1..10 {
+        return 2
+    }
+
+    if d in 1..=10 {
+        return 3
+    }
+
+    return 0
+}
+
+// CHECK: Let a:int
+// CHECK: Let b:int
+// CHECK: Let c:int
+// CHECK: Let d:int
+// CHECK: If
+// CHECK: Range

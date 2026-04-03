@@ -1,0 +1,10 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn grüße(nachricht str) str {
+    let länge int = 1
+    return nachricht
+}
+
+// CHECK: Function grüße
+// CHECK: Param nachricht:str
+// CHECK: Let länge:int

@@ -1,0 +1,12 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+fn pair() (int, int) {
+    return 1, 2
+}
+
+fn main() int {
+    let a int, b int, c int = pair()
+    return 0
+}
+
+// CHECK: error: destructuring let requires the same number of values as bindings

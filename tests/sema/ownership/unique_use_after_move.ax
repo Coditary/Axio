@@ -1,0 +1,17 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn consume(x *Obj) int {
+    return 0
+}
+
+fn main() int {
+    let unique *Obj = *Obj()
+    consume(unique)
+    consume(unique)
+    return 0
+}
+
+// CHECK: error: unique values cannot be used after they have been moved

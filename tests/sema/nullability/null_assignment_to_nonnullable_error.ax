@@ -1,0 +1,11 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Box {
+}
+
+fn main() int {
+    let box Box = null
+    return 0
+}
+
+// CHECK: error: null cannot initialize a value that is not nullable

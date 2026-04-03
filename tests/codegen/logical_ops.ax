@@ -1,0 +1,14 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() int {
+    let a int = 1
+    let b int = 0
+    if a && !b {
+        return 1
+    }
+    return 0
+}
+
+// CHECK: not
+// CHECK: and

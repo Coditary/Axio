@@ -1,0 +1,8 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() f64 {
+    return 1.5
+}
+
+// CHECK: ret double 1.500000e+00

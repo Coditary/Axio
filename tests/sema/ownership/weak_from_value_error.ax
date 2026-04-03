@@ -1,0 +1,11 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn main() int {
+    let value weak Obj = Obj()
+    return 0
+}
+
+// CHECK: error: weak values must originate from ARC or weak references

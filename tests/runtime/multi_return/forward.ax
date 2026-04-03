@@ -1,0 +1,15 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "11"
+
+fn pair(x int) (int, int) {
+    return x, x + 1
+}
+
+fn forward(x int) (int, int) {
+    return pair(x)
+}
+
+fn main() int {
+    let a int, b int = forward(5)
+    return a + b
+}

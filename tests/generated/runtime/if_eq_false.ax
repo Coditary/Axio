@@ -1,0 +1,10 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "9"
+
+fn main() int {
+    if 2 == 3 {
+        return 7
+    } else {
+        return 9
+    }
+}

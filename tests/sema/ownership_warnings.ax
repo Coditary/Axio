@@ -1,0 +1,21 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+    value int
+}
+
+fn keep(x Obj, w weak Obj, u *Obj) void {
+    return
+}
+
+fn main() int {
+    let arc = new Obj()
+    let weak_ref = new weak Obj()
+    let unique = *Obj()
+    keep(arc, weak_ref, unique)
+    return 0
+}
+
+// CHECK: warning: ARC ownership is parsed, but full retain/release semantics are not implemented yet
+// CHECK: warning: weak ownership is parsed, but full weak lifetime semantics are not implemented yet
+// CHECK: warning: unique allocation syntax is parsed, but full move/destruction semantics are not implemented yet

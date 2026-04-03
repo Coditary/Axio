@@ -1,0 +1,7 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>&1 | %filecheck %s
+
+fn inspect(x ref Obj) void {
+    return
+}
+
+// CHECK: warning: ownership modifiers are parsed but not yet lowered in codegen

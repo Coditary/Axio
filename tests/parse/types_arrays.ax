@@ -1,0 +1,12 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main() int {
+    let fixed i32[4]
+    let nested i8[2][3]
+    let dynamic str[]
+    return 0
+}
+
+// CHECK: Let fixed:i32[4]
+// CHECK: Let nested:i8[2][3]
+// CHECK: Let dynamic:str[]

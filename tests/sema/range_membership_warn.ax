@@ -1,0 +1,10 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+fn main() int {
+    if 5 in 1..10 {
+        return 1
+    }
+    return 0
+}
+
+// CHECK: warning: range membership is parsed but not yet lowered in codegen

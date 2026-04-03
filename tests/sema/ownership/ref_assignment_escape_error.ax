@@ -1,0 +1,12 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn main(src ref Obj) int {
+    let dst Obj = Obj()
+    dst = src
+    return 0
+}
+
+// CHECK: error: ref values cannot be assigned into owning or value storage

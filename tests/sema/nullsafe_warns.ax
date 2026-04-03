@@ -1,0 +1,18 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+class Box {
+    fn ping() void {
+        return
+    }
+}
+
+fn main() int {
+    let box Box = null
+    if box? {
+        box?.ping()
+    }
+    return 0
+}
+
+// CHECK: warning: null-check postfix '?' is parsed but only partially lowered
+// CHECK: warning: null-safe member access is parsed but not yet lowered in codegen

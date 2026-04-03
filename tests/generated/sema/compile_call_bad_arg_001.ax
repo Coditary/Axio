@@ -1,0 +1,8 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+fn main() int {
+    let value str = $readfile(1)
+    return 0
+}
+
+// CHECK: error: $readfile expects a leading string literal argument

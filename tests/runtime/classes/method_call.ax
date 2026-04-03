@@ -1,0 +1,15 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "7"
+
+class User {
+    age int
+
+    fn getAge() int {
+        return self.age
+    }
+}
+
+fn main() int {
+    let user = User(7)
+    return user.getAge()
+}

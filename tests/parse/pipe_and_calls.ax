@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn inc(x int) int {
+    return x + 1
+}
+
+fn double(x int) int {
+    return x * 2
+}
+
+fn main() int {
+    let a int = 1->inc->double
+    let b int = inc{3}(a)
+    let c int = inc{3, a}()
+    let d int = inc{}(c)
+    return d
+}
+
+// CHECK: Let a:int
+// CHECK: Let b:int
+// CHECK: Let c:int
+// CHECK: Let d:int
+// CHECK: Call

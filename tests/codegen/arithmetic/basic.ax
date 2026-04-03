@@ -1,0 +1,12 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() int {
+    let a int = 8
+    let b int = 3
+    let c int = (a + b) * 2 % 5
+    return c
+}
+
+// CHECK: mul
+// CHECK: srem

@@ -1,0 +1,15 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn inc(x int) int {
+    return x + 1
+}
+
+fn main() int {
+    let y int = 1->inc
+    return y
+}
+
+// CHECK: Function inc
+// CHECK: Function main
+// CHECK: Let y:int
+// CHECK: Call

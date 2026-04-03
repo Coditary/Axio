@@ -1,0 +1,13 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+class Box {
+    value int
+}
+
+fn main() int {
+    let box = Box()
+    box?.value
+    return 0
+}
+
+// CHECK: warning: null-safe member access used on a value that is not known to be nullable

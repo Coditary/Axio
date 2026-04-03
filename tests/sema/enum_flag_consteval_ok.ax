@@ -1,0 +1,13 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+enum ActorState as Flags {
+    IsAlive,
+    IsVisible,
+}
+
+fn main() int {
+    let state ActorState = ActorState{IsAlive, IsVisible}
+    return 0
+}
+
+// CHECK-NOT: error:

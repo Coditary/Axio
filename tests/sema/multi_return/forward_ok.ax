@@ -1,0 +1,11 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+fn pair() (int, int) {
+    return 1, 2
+}
+
+fn copy() (int, int) {
+    return pair()
+}
+
+// CHECK-NOT: error:

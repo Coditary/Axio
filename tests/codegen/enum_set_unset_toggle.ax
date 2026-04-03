@@ -1,0 +1,19 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+enum ActorState as Flags {
+    IsAlive,
+    IsVisible,
+}
+
+fn main() int {
+    let state ActorState = ActorState{IsAlive}
+    let set_state ActorState = state set ActorState.IsVisible
+    let unset_state ActorState = set_state unset ActorState.IsAlive
+    let toggle_state ActorState = unset_state toggle ActorState.IsVisible
+    return toggle_state
+}
+
+// CHECK: enum.set
+// CHECK: enum.unset
+// CHECK: enum.toggle

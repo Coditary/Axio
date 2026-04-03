@@ -1,0 +1,16 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn pair(x *Obj) (*Obj, *Obj) {
+    return x, x
+}
+
+fn main() int {
+    let unique *Obj = *Obj()
+    let a *Obj, b *Obj = pair(unique)
+    return 0
+}
+
+// CHECK: error: unique values cannot be used after they have been moved

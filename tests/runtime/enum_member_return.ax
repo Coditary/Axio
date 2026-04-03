@@ -1,0 +1,12 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "2"
+
+enum Color() {
+    Red,
+    Green,
+    Blue,
+}
+
+fn main() int {
+    return Color.Blue
+}

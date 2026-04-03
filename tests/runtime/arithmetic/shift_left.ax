@@ -1,0 +1,6 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "8"
+
+fn main() int {
+    return 2 << 2
+}

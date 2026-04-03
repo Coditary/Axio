@@ -1,0 +1,16 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+struct Base {
+    age int
+}
+
+class User {
+    Base
+}
+
+fn main() int {
+    let user = User()
+    return user.age
+}
+
+// CHECK-NOT: error: class 'User' has no member 'age'

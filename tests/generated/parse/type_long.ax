@@ -1,0 +1,7 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn main(value long) int {
+    return 0
+}
+
+// CHECK: Param value:long

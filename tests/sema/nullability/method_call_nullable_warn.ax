@@ -1,0 +1,15 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+class Box {
+    fn ping() int {
+        return 1
+    }
+}
+
+fn main() int {
+    let ptr Box = new Box()
+    ptr.ping()
+    return 0
+}
+
+// CHECK: warning: method call may dereference a nullable value; use '?.' or guard it with 'if value?'

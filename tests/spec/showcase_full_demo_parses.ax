@@ -1,0 +1,1 @@
+// RUN: %axc --dump-ast ../showcase/full_language_demo/main.ax >/dev/null

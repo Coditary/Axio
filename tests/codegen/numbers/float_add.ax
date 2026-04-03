@@ -1,0 +1,10 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() f64 {
+    let a f64 = 1.5
+    let b f64 = 2.5
+    return a + b
+}
+
+// CHECK: fadd

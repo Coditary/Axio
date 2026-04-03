@@ -1,0 +1,12 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "1"
+
+enum ActorState as Flags {
+    IsAlive,
+    IsVisible,
+}
+
+fn main() int {
+    let state ActorState = ActorState{IsAlive}
+    return state isnot ActorState.IsVisible
+}

@@ -1,0 +1,11 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn main() int {
+    let alias ref Obj = new Obj()
+    return 0
+}
+
+// CHECK: error: ref values cannot be stored from owning heap initializers
