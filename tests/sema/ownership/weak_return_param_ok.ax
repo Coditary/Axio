@@ -1,0 +1,9 @@
+// RUN: %axc --check-only %s
+
+class Obj {
+    value int
+}
+
+fn id(x weak Obj) weak Obj {
+    return x
+}

@@ -31,6 +31,12 @@ bool Compiler::compile(const CompileOptions& options) const {
     Parser parser(std::move(tokens), diagnostics);
     TranslationUnit unit = parser.parseTranslationUnit();
 
+    if (options.dumpAst) {
+        ASTPrinter printer(std::cout);
+        printer.print(unit);
+        return !diagnostics.hasErrors();
+    }
+
     ModuleLoader moduleLoader(diagnostics);
     moduleLoader.loadInto(unit, options.inputFile);
 
@@ -40,11 +46,6 @@ bool Compiler::compile(const CompileOptions& options) const {
     MetaPipeline meta(sourceManager, diagnostics);
     meta.run(unit);
 
-    if (options.dumpAst) {
-        ASTPrinter printer(std::cout);
-        printer.print(unit);
-    }
-
     if (diagnostics.hasErrors()) {
         diagnostics.renderAll(std::cerr);
         return false;
@@ -52,6 +53,10 @@ bool Compiler::compile(const CompileOptions& options) const {
 
     if (!diagnostics.diagnostics().empty() && !diagnostics.hasRenderedAll()) {
         diagnostics.renderAll(std::cerr);
+    }
+
+    if (options.checkOnly && diagnostics.diagnostics().empty()) {
+        std::cout << '\n';
     }
 
     if (options.checkOnly || options.dumpAst) {

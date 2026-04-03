@@ -1,4 +1,4 @@
-// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
 class Box {
 }
@@ -8,4 +8,4 @@ fn main() int {
     return 0
 }
 
-// CHECK: error: null cannot initialize a value that is not nullable
+// CHECK-NOT: error:

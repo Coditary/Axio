@@ -10,5 +10,5 @@ fn main() int {
     return user.age
 }
 
-// CHECK: getelementptr inbounds %User
+// CHECK: getelementptr inbounds{{( nuw)?}} %User
 // CHECK: load i32

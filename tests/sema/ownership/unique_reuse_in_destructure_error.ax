@@ -13,4 +13,4 @@ fn main() int {
     return 0
 }
 
-// CHECK: error: unique values cannot be used after they have been moved
+// CHECK: error: unique values cannot be returned more than once from the same statement

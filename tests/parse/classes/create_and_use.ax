@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+class User {
+    age int
+
+    fn bump() int {
+        return self.age + 1
+    }
+}
+
+fn main() int {
+    let user = User(7)
+    user.age = 12
+    return user.bump()
+}
+
+// CHECK: Class User
+// CHECK: Member age:int
+// CHECK: Function bump
+// CHECK: Let user
+// CHECK: Binary
+// CHECK: Member age
+// CHECK: Call

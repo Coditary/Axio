@@ -1,5 +1,7 @@
 #include "axc/AST/ASTPrinter.h"
 
+#include <algorithm>
+
 namespace axc {
 
 void ASTPrinter::print(const TranslationUnit& unit) const {
@@ -24,6 +26,10 @@ void ASTPrinter::indent(int level) const {
 
 void ASTPrinter::printDecl(const Decl& decl, int level) const {
     indent(level);
+    for (const auto& annotation : decl.annotations) {
+        out_ << "Annotation @" << annotation.name << '\n';
+        indent(level);
+    }
     switch (decl.kind) {
         case DeclKind::Import: {
             const auto& importDecl = static_cast<const ImportDecl&>(decl);
@@ -108,22 +114,48 @@ void ASTPrinter::printDecl(const Decl& decl, int level) const {
 }
 
 void ASTPrinter::printType(const Type& type) const {
-    out_ << type.name;
+    const bool hasUnique = std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Unique) != type.modifiers.end();
+    const bool hasRef = std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Ref) != type.modifiers.end();
+    const bool hasWeak = std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Weak) != type.modifiers.end();
+
+    const bool prefixQualifiers = !hasUnique && type.name != "Obj";
+    if (prefixQualifiers) {
+        if (hasRef) {
+            out_ << "ref ";
+        }
+        if (hasWeak) {
+            out_ << "weak ";
+        }
+    }
     for (const auto& modifier : type.modifiers) {
         switch (modifier) {
             case TypeModifier::Ref:
-                out_ << " ref";
                 break;
             case TypeModifier::Weak:
-                out_ << " weak";
                 break;
             case TypeModifier::Unique:
-                out_ << " *";
                 break;
         }
     }
+    out_ << type.name;
     for (std::size_t i = 0; i < type.pointerDepth; ++i) {
         out_ << '*';
+    }
+    if (hasUnique) {
+        if (hasRef) {
+            out_ << " ref";
+        }
+        if (hasWeak) {
+            out_ << " weak";
+        }
+        out_ << " *";
+    } else if (!prefixQualifiers) {
+        if (hasRef) {
+            out_ << " ref";
+        }
+        if (hasWeak) {
+            out_ << " weak";
+        }
     }
     for (const auto& extent : type.arrayExtents) {
         out_ << '[';

@@ -1,0 +1,17 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "14"
+
+class Obj {
+    value int
+}
+
+fn make() Obj {
+    let created Obj = new Obj(7)
+    return created
+}
+
+fn main() int {
+    let first Obj = make()
+    let second Obj = first
+    return first.value + second.value
+}

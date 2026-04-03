@@ -13,6 +13,14 @@
 
 namespace axc {
 
+namespace {
+
+std::filesystem::path runtimeObjectPath() {
+    return std::filesystem::path("/home/leodora/Documents/Dev/AI/Axio/build/CMakeFiles/axc_core.dir/src/Runtime/AxioRuntime.cpp.o");
+}
+
+}
+
 std::string shellQuote(const std::filesystem::path& path) {
     std::string value = path.string();
     std::string quoted = "'";
@@ -94,7 +102,7 @@ bool LLVMEmitter::emit(const TranslationUnit& translationUnit, const EmitOptions
 
     if (options.linkBinary) {
         const std::filesystem::path linker = "clang++";
-        std::string command = linker.string() + " " + shellQuote(options.objectOutput) + " -o " + shellQuote(options.binaryOutput);
+        std::string command = linker.string() + " " + shellQuote(options.objectOutput) + " " + shellQuote(runtimeObjectPath()) + " -o " + shellQuote(options.binaryOutput);
         if (std::system(command.c_str()) != 0) {
             diagnostics_.error(syntheticRange, "linker invocation failed: " + command);
             return false;

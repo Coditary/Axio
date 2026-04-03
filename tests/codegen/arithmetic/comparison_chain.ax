@@ -1,0 +1,15 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() int {
+    let a int = 3
+    let b int = 5
+    if a < b >= 1 {
+        return 1
+    }
+    return 0
+}
+
+// CHECK: icmp slt
+// CHECK: icmp sge
+// CHECK: and i1

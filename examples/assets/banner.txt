@@ -1,0 +1,1 @@
+Axio says hello from embedded compile-time data.

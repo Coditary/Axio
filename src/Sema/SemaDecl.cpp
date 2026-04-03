@@ -65,20 +65,16 @@ void SemaImpl::validateFunction(const FunctionDecl& fn) {
     if (fn.returnTypes.empty()) {
         diagnostics_.warning(fn.range, "function without explicit return type defaults to void semantics in this prototype");
     }
-    if (!fn.compileParameters.empty()) {
-        diagnostics_.warning(fn.range, "compile-time function parameters are parsed but not yet specialized in codegen");
-    }
-
     for (const auto& param : fn.runtimeParameters) {
-        ValueInfo info {ownershipFromType(param.type), param.type.name, isPointerLike(param.type)};
+        ValueInfo info {ownershipFromType(param.type), param.type.name, false};
         symbols_[param.name] = info;
         symbolTypes_[param.name] = param.type;
-        if (info.ownership == ValueInfo::Ownership::Arc) {
-            diagnostics_.warning(param.range, "ARC ownership is parsed, but full retain/release semantics are not implemented yet");
-        }
-        if (info.ownership == ValueInfo::Ownership::Weak) {
-            diagnostics_.warning(param.range, "weak ownership is parsed, but full weak lifetime semantics are not implemented yet");
-        }
+    }
+
+    for (const auto& param : fn.compileParameters) {
+        ValueInfo info {ownershipFromType(param.type), param.type.name, false};
+        symbols_[param.name] = info;
+        symbolTypes_[param.name] = param.type;
     }
 
     if (fn.body) {
@@ -105,16 +101,19 @@ void SemaImpl::validateStmt(const Stmt& stmt, const FunctionDecl& fn) {
                 diagnostics_.error(ret.range, "multi-return statement must return the same number of values as declared");
             }
             std::unordered_set<std::string> returnedUniqueValues;
+            std::size_t returnIndex = 0;
             for (const auto& value : ret.values) {
                 validateExpr(*value);
                 collectRepeatedUniqueUses(*value, returnedUniqueValues, "unique values cannot be returned more than once from the same statement");
                 if (value->kind == ExprKind::DeclRef) {
                     const auto& ref = static_cast<const DeclRefExpr&>(*value);
                     auto it = symbols_.find(ref.name);
-                    if (it != symbols_.end() && it->second.ownership == ValueInfo::Ownership::Ref) {
+                    const bool matchingRefReturn = returnIndex < fn.returnTypes.size() && ownershipFromType(fn.returnTypes[returnIndex]) == ValueInfo::Ownership::Ref;
+                    if (it != symbols_.end() && it->second.ownership == ValueInfo::Ownership::Ref && !matchingRefReturn) {
                         diagnostics_.error(value->range, "ref values cannot escape by being returned");
                     }
                 }
+                returnIndex += exprValueCount(*value);
             }
             break;
         }
@@ -141,24 +140,28 @@ void SemaImpl::validateStmt(const Stmt& stmt, const FunctionDecl& fn) {
                 }
                 ValueInfo value = inferExpr(*letStmt.initializer);
                 const LetBinding& firstBinding = letStmt.bindings.front();
-                if (letStmt.initializer->kind == ExprKind::NullLiteral && !firstBinding.explicitType.name.empty() && !typeSupportsNullability(firstBinding.explicitType)) {
+                const auto initializerType = exprType(*letStmt.initializer);
+                const auto bindingOwnership = !firstBinding.explicitType.name.empty() ? ownershipFromType(firstBinding.explicitType) : ValueInfo::Ownership::Unknown;
+                ValueInfo::Ownership initializerOwnership = value.ownership;
+                if (initializerOwnership == ValueInfo::Ownership::Unknown && initializerType.has_value()) {
+                    initializerOwnership = ownershipFromType(*initializerType);
+                }
+                if (letStmt.initializer->kind == ExprKind::NullLiteral && !firstBinding.explicitType.name.empty() &&
+                    ownershipFromType(firstBinding.explicitType) == ValueInfo::Ownership::Value) {
                     diagnostics_.error(letStmt.initializer->range, "null cannot initialize a value that is not nullable");
                 }
-                if (!firstBinding.explicitType.name.empty() && ownershipFromType(firstBinding.explicitType) == ValueInfo::Ownership::Ref &&
-                    value.ownership != ValueInfo::Ownership::Value && value.ownership != ValueInfo::Ownership::Unknown) {
+                if (!firstBinding.explicitType.name.empty() && bindingOwnership == ValueInfo::Ownership::Ref &&
+                    initializerOwnership != ValueInfo::Ownership::Value && initializerOwnership != ValueInfo::Ownership::Unknown && initializerOwnership != ValueInfo::Ownership::Ref) {
                     diagnostics_.error(letStmt.range, "ref values cannot be stored from owning heap initializers");
                 }
-                if (!firstBinding.explicitType.name.empty() && ownershipFromType(firstBinding.explicitType) != ValueInfo::Ownership::Ref &&
-                    value.ownership == ValueInfo::Ownership::Ref) {
+                if (!firstBinding.explicitType.name.empty() && bindingOwnership != ValueInfo::Ownership::Ref && initializerOwnership == ValueInfo::Ownership::Ref) {
                     diagnostics_.error(letStmt.range, "ref values cannot be stored in owning or value bindings");
                 }
-                if (!firstBinding.explicitType.name.empty() && ownershipFromType(firstBinding.explicitType) == ValueInfo::Ownership::Weak &&
-                    value.ownership != ValueInfo::Ownership::Arc && value.ownership != ValueInfo::Ownership::Weak && value.ownership != ValueInfo::Ownership::Unknown) {
+                if (!firstBinding.explicitType.name.empty() && bindingOwnership == ValueInfo::Ownership::Weak &&
+                    initializerOwnership != ValueInfo::Ownership::Arc && initializerOwnership != ValueInfo::Ownership::Weak && initializerOwnership != ValueInfo::Ownership::Unknown) {
                     diagnostics_.error(letStmt.range, "weak values must originate from ARC or weak references");
                 }
-                if (!firstBinding.explicitType.name.empty() && ownershipFromType(firstBinding.explicitType) == ValueInfo::Ownership::Arc &&
-                    value.ownership == ValueInfo::Ownership::Unique) {
-                    diagnostics_.warning(letStmt.range, "assigning unique values into ARC storage is parsed but move-to-ARC semantics are not implemented yet");
+                if (!firstBinding.explicitType.name.empty() && bindingOwnership == ValueInfo::Ownership::Arc && initializerOwnership == ValueInfo::Ownership::Unique) {
                 }
                 for (const auto& binding : letStmt.bindings) {
                     Type bindingType = binding.explicitType;
@@ -172,7 +175,12 @@ void SemaImpl::validateStmt(const Stmt& stmt, const FunctionDecl& fn) {
                         symbolTypes_[binding.name] = bindingType;
                     }
                     const bool nullable = letStmt.initializer->kind == ExprKind::NullLiteral ||
-                        (bindingType.name.empty() ? value.nullable : typeSupportsNullability(bindingType) && value.nullable);
+                        (binding.explicitType.name.empty() ? value.nullable : typeSupportsNullability(binding.explicitType));
+                    Type storedSymbolType = bindingType;
+                    if (!binding.explicitType.name.empty() && value.nullable && typeSupportsNullability(binding.explicitType) && storedSymbolType.pointerDepth == 0) {
+                        ++storedSymbolType.pointerDepth;
+                        symbolTypes_[binding.name] = storedSymbolType;
+                    }
                     symbols_[binding.name] = !binding.explicitType.name.empty()
                         ? ValueInfo {ownershipFromType(binding.explicitType), binding.explicitType.name, nullable}
                         : ValueInfo {value.ownership, bindingType.name, nullable};

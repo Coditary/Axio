@@ -1,0 +1,16 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+class Obj {
+}
+
+fn pair{tag int}(a *Obj, b *Obj) int {
+    return tag
+}
+
+fn main() int {
+    let unique *Obj = *Obj()
+    pair{1}(unique, unique)
+    return 0
+}
+
+// CHECK: error: unique values cannot be passed more than once to the same call

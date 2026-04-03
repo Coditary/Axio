@@ -1,0 +1,10 @@
+// RUN: %axc --check-only %s
+
+class Obj {
+    value int
+}
+
+fn main() int {
+    let owned Obj = *Obj(7)
+    return owned.value
+}

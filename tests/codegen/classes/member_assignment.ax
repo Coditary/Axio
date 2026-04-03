@@ -12,4 +12,4 @@ fn main() int {
 }
 
 // CHECK: store i32 9
-// CHECK: getelementptr inbounds %User
+// CHECK: getelementptr inbounds{{( nuw)?}} %User

@@ -10,9 +10,11 @@ namespace axc {
 std::unique_ptr<FunctionDecl> Parser::parseFunctionDecl(std::vector<Annotation> annotations, bool isExtern, bool isMethod, std::string receiverType) {
     expect(TokenKind::KwFn, "expected 'fn'");
     const SourceRange start = previous().range;
-    if (!expect(TokenKind::Identifier, "expected function name")) {
+    if (!(check(TokenKind::Identifier) || detail::isBuiltinTypeName(current().kind))) {
+        diagnostics_.error(current().range, "expected function name");
         return nullptr;
     }
+    advance();
 
     auto function = std::make_unique<FunctionDecl>(previous().lexeme, combine(start, previous().range));
     function->annotations = std::move(annotations);
@@ -327,7 +329,6 @@ Type Parser::parseType() {
     }
 
     while (match(TokenKind::Star)) {
-        ++type.pointerDepth;
         type.modifiers.push_back(TypeModifier::Unique);
         type.range = previous().range;
     }

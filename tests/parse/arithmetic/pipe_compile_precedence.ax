@@ -1,0 +1,26 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+fn inc{step int}(x int) int {
+    return x + step
+}
+
+fn wrap(x int) int {
+    return x
+}
+
+fn main() int {
+    let a int = 1->wrap
+    let b int = inc{2}(a + 3)
+    let c int = inc(4, b * 2)
+    let d int = inc{5, c}()
+    let e int = inc{}(6, d)
+    return e
+}
+
+// CHECK: Let a:int
+// CHECK: Let b:int
+// CHECK: Let c:int
+// CHECK: Let d:int
+// CHECK: Let e:int
+// CHECK: Call
+// CHECK: Int 6

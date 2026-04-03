@@ -1,0 +1,14 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "15"
+
+fn add{lhs int}(rhs int) int {
+    return lhs + rhs
+}
+
+fn main() int {
+    let a int = add{3}(4)
+    let b int = add(5, a)
+    let c int = add{2, b}()
+    let d int = add{}(1, c)
+    return d
+}

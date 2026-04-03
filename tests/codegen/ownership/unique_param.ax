@@ -1,0 +1,17 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+class Obj {
+    value int
+}
+
+fn read(x *Obj) int {
+    return x.value
+}
+
+fn main() int {
+    let value *Obj = *Obj(7)
+    return read(value)
+}
+
+// CHECK: define i32 @read(ptr %x)

@@ -1,0 +1,11 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "0"
+
+class Box {
+    value int
+}
+
+fn main() int {
+    let box Box = null
+    return box?.value
+}

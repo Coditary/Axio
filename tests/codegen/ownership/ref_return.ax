@@ -1,0 +1,18 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+class Obj {
+    value int
+}
+
+fn borrow(x ref Obj) ref Obj {
+    return x
+}
+
+fn main() int {
+    let value = Obj(7)
+    let alias ref Obj = borrow(&value)
+    return alias.value
+}
+
+// CHECK: define ptr @borrow(ptr %x)

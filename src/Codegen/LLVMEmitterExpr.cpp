@@ -5,6 +5,72 @@
 
 namespace axc {
 
+namespace {
+
+std::optional<std::uint64_t> lookupEnumValueBySuffix(const std::unordered_map<std::string, EnumValueInfo>& enumValues,
+                                                    std::string_view qualifiedName) {
+    for (const auto& [enumName, info] : enumValues) {
+        auto exactIt = info.values.find(std::string(qualifiedName));
+        if (exactIt != info.values.end()) {
+            return exactIt->second;
+        }
+        const std::string suffix = "." + std::string(qualifiedName);
+        for (const auto& [name, value] : info.values) {
+            if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                return value;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+llvm::Constant* nullConstantForType(llvm::LLVMContext& context, llvm::Type* type) {
+    if (type->isVoidTy()) {
+        return nullptr;
+    }
+    if (type->isPointerTy()) {
+        return llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(type));
+    }
+    if (type->isIntegerTy()) {
+        return llvm::ConstantInt::get(type, 0);
+    }
+    if (type->isFloatingPointTy()) {
+        return llvm::ConstantFP::get(type, 0.0);
+    }
+    if (type->isStructTy() || type->isArrayTy()) {
+        return llvm::ConstantAggregateZero::get(type);
+    }
+    return llvm::Constant::getNullValue(type);
+}
+
+llvm::Value* coerceArgumentValue(llvm::IRBuilder<>& builder,
+                                llvm::LLVMContext& context,
+                                llvm::Value* value,
+                                llvm::Type* targetType) {
+    if (value == nullptr) {
+        return nullptr;
+    }
+    if (value->getType() == targetType) {
+        return value;
+    }
+    if (targetType->isStructTy() && value->getType()->isPointerTy()) {
+        return builder.CreateLoad(targetType, value, "arg.load");
+    }
+    if (targetType->isPointerTy() && value->getType()->isPointerTy()) {
+        return builder.CreatePointerCast(value, targetType, "arg.ptrcast");
+    }
+    if (targetType->isIntegerTy(1) && value->getType()->isPointerTy()) {
+        return builder.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "arg.ptrbool");
+    }
+    return value;
+}
+
+bool hasModifier(const Type& type, TypeModifier modifier) {
+    return std::find(type.modifiers.begin(), type.modifiers.end(), modifier) != type.modifiers.end();
+}
+
+}  // namespace
+
 llvm::Value* ModuleEmitter::emitStringConstant(const std::string& value, const std::string& nameHint) {
     auto* constant = llvm::ConstantDataArray::getString(context_, value, true);
     auto* global = new llvm::GlobalVariable(*module_, constant->getType(), true, llvm::GlobalValue::PrivateLinkage, constant, nameHint);
@@ -19,11 +85,14 @@ MultiValue ModuleEmitter::emitExprValues(const Expr& expr) {
     switch (expr.kind) {
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
-            if (!call.compileArguments.empty()) {
-                diagnostics_.error(call.range, "codegen for compile-time call arguments is not implemented yet");
-                return {};
+            std::vector<const Expr*> suppliedArguments;
+            suppliedArguments.reserve(call.compileArguments.size() + call.runtimeArguments.size());
+            for (const auto& argument : call.compileArguments) {
+                suppliedArguments.push_back(argument.get());
             }
-
+            for (const auto& argument : call.runtimeArguments) {
+                suppliedArguments.push_back(argument.get());
+            }
             if (auto qualifiedCallee = moduleQualifiedName(*call.callee); qualifiedCallee.has_value()) {
                 auto enumIt = enumValues_.find(*qualifiedCallee);
                 if (enumIt != enumValues_.end() && call.runtimeArguments.size() == 1) {
@@ -34,20 +103,46 @@ MultiValue ModuleEmitter::emitExprValues(const Expr& expr) {
                 auto it = functions_.find(*qualifiedCallee);
                 if (it != functions_.end()) {
                     llvm::Function* function = it->second;
-                    if (function->arg_size() != call.runtimeArguments.size()) {
+                    if (function->arg_size() != suppliedArguments.size()) {
                         diagnostics_.error(call.range, "wrong number of arguments for call to '" + *qualifiedCallee + "'");
                         return {};
                     }
 
                     std::vector<llvm::Value*> args;
-                    args.reserve(call.runtimeArguments.size());
+                    args.reserve(suppliedArguments.size());
                     const FunctionDecl* functionDecl = functionDecls_[*qualifiedCallee];
-                    for (const auto& argument : call.runtimeArguments) {
-                        llvm::Value* value = emitExpr(*argument);
+                    std::size_t suppliedIndex = 0;
+                    for (std::size_t compileIndex = 0; compileIndex < functionDecl->compileParameters.size(); ++compileIndex, ++suppliedIndex) {
+                        llvm::Value* value = emitExpr(*suppliedArguments[suppliedIndex]);
                         if (value == nullptr) {
                             return {};
                         }
-                        args.push_back(castValueToType(value, functionDecl->runtimeParameters[args.size()].type));
+                        llvm::Type* targetType = lowerType(functionDecl->compileParameters[compileIndex].type);
+                        value = coerceArgumentValue(builder_, context_, value, targetType);
+                        args.push_back(castValueToType(value, functionDecl->compileParameters[compileIndex].type));
+                    }
+                    for (std::size_t runtimeIndex = 0; runtimeIndex < functionDecl->runtimeParameters.size(); ++runtimeIndex, ++suppliedIndex) {
+                        const Expr& argumentExpr = *suppliedArguments[suppliedIndex];
+                        llvm::Value* value = nullptr;
+                        const Type& parameterType = functionDecl->runtimeParameters[runtimeIndex].type;
+                        if (hasModifier(parameterType, TypeModifier::Ref) && argumentExpr.kind == ExprKind::Unary) {
+                            const auto& unary = static_cast<const UnaryExpr&>(argumentExpr);
+                            if (unary.op == UnaryOp::AddressOf) {
+                                Type operandType = inferExprType(*unary.operand);
+                                if (isArcOwnedType(operandType) || isWeakType(operandType) || isUniqueType(operandType)) {
+                                    value = emitExpr(*unary.operand);
+                                }
+                            }
+                        }
+                        if (value == nullptr) {
+                            value = emitExpr(argumentExpr);
+                        }
+                        if (value == nullptr) {
+                            return {};
+                        }
+                        llvm::Type* targetType = lowerType(parameterType);
+                        value = coerceArgumentValue(builder_, context_, value, targetType);
+                        args.push_back(castValueToType(value, parameterType));
                     }
 
                     llvm::Value* callValue = builder_.CreateCall(function, args, function->getReturnType()->isVoidTy() ? "" : "calltmp");
@@ -62,43 +157,170 @@ MultiValue ModuleEmitter::emitExprValues(const Expr& expr) {
                     }
                     return result;
                 }
+
+            }
+
+            if (auto qualifiedCallee = qualifiedNameFromExpr(*call.callee); qualifiedCallee.has_value()) {
+                auto it = functions_.find(*qualifiedCallee);
+                if (it != functions_.end()) {
+                    llvm::Function* function = it->second;
+                    const FunctionDecl* functionDecl = functionDecls_[*qualifiedCallee];
+                    std::vector<llvm::Value*> args;
+                    args.reserve(suppliedArguments.size());
+                    std::size_t suppliedIndex = 0;
+                    for (std::size_t compileIndex = 0; compileIndex < functionDecl->compileParameters.size(); ++compileIndex, ++suppliedIndex) {
+                        llvm::Value* value = emitExpr(*suppliedArguments[suppliedIndex]);
+                        if (value == nullptr) {
+                            return {};
+                        }
+                        llvm::Type* targetType = lowerType(functionDecl->compileParameters[compileIndex].type);
+                        value = coerceArgumentValue(builder_, context_, value, targetType);
+                        args.push_back(castValueToType(value, functionDecl->compileParameters[compileIndex].type));
+                    }
+                    for (std::size_t runtimeIndex = 0; runtimeIndex < functionDecl->runtimeParameters.size(); ++runtimeIndex, ++suppliedIndex) {
+                        const Expr& argumentExpr = *suppliedArguments[suppliedIndex];
+                        llvm::Value* value = nullptr;
+                        const Type& parameterType = functionDecl->runtimeParameters[runtimeIndex].type;
+                        if (hasModifier(parameterType, TypeModifier::Ref) && argumentExpr.kind == ExprKind::Unary) {
+                            const auto& unary = static_cast<const UnaryExpr&>(argumentExpr);
+                            if (unary.op == UnaryOp::AddressOf) {
+                                Type operandType = inferExprType(*unary.operand);
+                                if (isArcOwnedType(operandType) || isWeakType(operandType) || isUniqueType(operandType)) {
+                                    value = emitExpr(*unary.operand);
+                                }
+                            }
+                        }
+                        if (value == nullptr) {
+                            value = emitExpr(argumentExpr);
+                        }
+                        if (value == nullptr) {
+                            return {};
+                        }
+                        llvm::Type* targetType = lowerType(parameterType);
+                        value = coerceArgumentValue(builder_, context_, value, targetType);
+                        args.push_back(castValueToType(value, parameterType));
+                    }
+                    llvm::Value* callValue = builder_.CreateCall(function, args, function->getReturnType()->isVoidTy() ? "" : "calltmp");
+                    if (functionDecl->returnTypes.size() <= 1) {
+                        return callValue == nullptr ? MultiValue {} : MultiValue {{callValue}};
+                    }
+                    MultiValue result;
+                    result.values.reserve(functionDecl->returnTypes.size());
+                    for (std::size_t i = 0; i < functionDecl->returnTypes.size(); ++i) {
+                        result.values.push_back(builder_.CreateExtractValue(callValue, {static_cast<unsigned>(i)}, "ret." + std::to_string(i)));
+                    }
+                    return result;
+                }
             }
 
             if (call.callee->kind == ExprKind::Member) {
                 const auto& member = static_cast<const MemberExpr&>(*call.callee);
-                if (member.nullSafe && member.base->kind == ExprKind::DeclRef) {
-                    const auto& base = static_cast<const DeclRefExpr&>(*member.base);
-                    const auto symbol = lookupSymbol(base.name);
-                    if (!symbol.has_value()) {
-                        diagnostics_.error(call.range, "unknown variable '" + base.name + "'");
-                        return {};
-                    }
-                    if (!symbol->nullable) {
-                        diagnostics_.warning(call.range, "null-safe call lowers as a direct call because the value is not known nullable");
-                    }
-                    return MultiValue {{llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), 0, false)}};
-                }
                 if (auto className = inferClassTypeName(*member.base); className.has_value()) {
                     const std::string loweredName = *className + "." + member.member;
                     auto it = functions_.find(loweredName);
                     if (it != functions_.end()) {
                         llvm::Function* function = it->second;
                         const FunctionDecl* functionDecl = functionDecls_[loweredName];
-                        std::vector<llvm::Value*> args;
-                        args.reserve(call.runtimeArguments.size() + 1);
+
                         llvm::Value* selfValue = emitExpr(*member.base);
                         if (selfValue == nullptr) {
                             return {};
                         }
-                        args.push_back(castValueToType(selfValue, functionDecl->runtimeParameters[0].type));
-                        for (const auto& argument : call.runtimeArguments) {
-                            llvm::Value* value = emitExpr(*argument);
+
+                        llvm::BasicBlock* insertBlock = builder_.GetInsertBlock();
+                        llvm::Function* parentFunction = insertBlock->getParent();
+                        llvm::BasicBlock* continueBlock = nullptr;
+                        llvm::BasicBlock* callBlock = insertBlock;
+                        llvm::PHINode* singleResultPhi = nullptr;
+                        std::vector<llvm::PHINode*> multiResultPhis;
+
+                        if (member.nullSafe) {
+                            if (!selfValue->getType()->isPointerTy()) {
+                                diagnostics_.error(call.range, "null-safe call requires a pointer-like receiver");
+                                return {};
+                            }
+                            continueBlock = llvm::BasicBlock::Create(context_, "nullsafe.call.cont", parentFunction);
+                            callBlock = llvm::BasicBlock::Create(context_, "nullsafe.call.invoke", parentFunction);
+                            llvm::Value* isNonNull = builder_.CreateICmpNE(
+                                selfValue,
+                                llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(selfValue->getType())),
+                                "nullsafe.call.test");
+                            builder_.CreateCondBr(isNonNull, callBlock, continueBlock);
+                            builder_.SetInsertPoint(callBlock);
+                        }
+
+                        std::vector<llvm::Value*> args;
+                        args.reserve(suppliedArguments.size() + 1);
+                        std::size_t suppliedIndex = 0;
+                        for (std::size_t compileIndex = 0; compileIndex < functionDecl->compileParameters.size(); ++compileIndex, ++suppliedIndex) {
+                            llvm::Value* value = emitExpr(*suppliedArguments[suppliedIndex]);
                             if (value == nullptr) {
                                 return {};
                             }
-                            args.push_back(castValueToType(value, functionDecl->runtimeParameters[args.size()].type));
+                            args.push_back(castValueToType(value, functionDecl->compileParameters[compileIndex].type));
+                        }
+                        llvm::Value* loweredSelf = selfValue;
+                        llvm::Type* selfTargetType = lowerType(functionDecl->runtimeParameters[0].type);
+                        if (selfTargetType->isStructTy() && selfValue->getType()->isPointerTy()) {
+                            loweredSelf = builder_.CreateLoad(selfTargetType, selfValue, "self.load");
+                        } else {
+                            loweredSelf = castValueToType(selfValue, functionDecl->runtimeParameters[0].type);
+                        }
+                        args.push_back(loweredSelf);
+                        for (std::size_t runtimeIndex = 1; runtimeIndex < functionDecl->runtimeParameters.size(); ++runtimeIndex, ++suppliedIndex) {
+                            const Expr& argumentExpr = *suppliedArguments[suppliedIndex];
+                            llvm::Value* value = nullptr;
+                            const Type& parameterType = functionDecl->runtimeParameters[runtimeIndex].type;
+                            if (hasModifier(parameterType, TypeModifier::Ref) && argumentExpr.kind == ExprKind::Unary) {
+                                const auto& unary = static_cast<const UnaryExpr&>(argumentExpr);
+                                if (unary.op == UnaryOp::AddressOf) {
+                                    Type operandType = inferExprType(*unary.operand);
+                                    if (isArcOwnedType(operandType) || isWeakType(operandType) || isUniqueType(operandType)) {
+                                        value = emitExpr(*unary.operand);
+                                    }
+                                }
+                            }
+                            if (value == nullptr) {
+                                value = emitExpr(argumentExpr);
+                            }
+                            if (value == nullptr) {
+                                return {};
+                            }
+                            args.push_back(castValueToType(value, parameterType));
                         }
                         llvm::Value* callValue = builder_.CreateCall(function, args, function->getReturnType()->isVoidTy() ? "" : "calltmp");
+                        llvm::BasicBlock* actualCallBlock = builder_.GetInsertBlock();
+
+                        if (member.nullSafe && continueBlock != nullptr) {
+                            builder_.CreateBr(continueBlock);
+                            builder_.SetInsertPoint(continueBlock);
+                            if (functionDecl->returnTypes.empty()) {
+                                return {};
+                            }
+                            if (functionDecl->returnTypes.size() == 1) {
+                                llvm::Type* returnType = lowerType(functionDecl->returnTypes.front());
+                                singleResultPhi = builder_.CreatePHI(returnType, 2, "nullsafe.call.result");
+                                singleResultPhi->addIncoming(castValueToType(callValue, functionDecl->returnTypes.front()), actualCallBlock);
+                                singleResultPhi->addIncoming(nullConstantForType(context_, returnType), insertBlock);
+                                return MultiValue {{singleResultPhi}};
+                            }
+                            multiResultPhis.reserve(functionDecl->returnTypes.size());
+                            for (std::size_t i = 0; i < functionDecl->returnTypes.size(); ++i) {
+                                llvm::Type* returnType = lowerType(functionDecl->returnTypes[i]);
+                                llvm::Value* extracted = builder_.CreateExtractValue(callValue, {static_cast<unsigned>(i)}, "ret." + std::to_string(i));
+                                auto* phi = builder_.CreatePHI(returnType, 2, "nullsafe.call.result." + std::to_string(i));
+                                phi->addIncoming(castValueToType(extracted, functionDecl->returnTypes[i]), actualCallBlock);
+                                phi->addIncoming(nullConstantForType(context_, returnType), insertBlock);
+                                multiResultPhis.push_back(phi);
+                            }
+                            MultiValue result;
+                            result.values.reserve(multiResultPhis.size());
+                            for (llvm::PHINode* phi : multiResultPhis) {
+                                result.values.push_back(phi);
+                            }
+                            return result;
+                        }
+
                         if (functionDecl->returnTypes.size() <= 1) {
                             return callValue == nullptr ? MultiValue {} : MultiValue {{callValue}};
                         }
@@ -130,20 +352,46 @@ MultiValue ModuleEmitter::emitExprValues(const Expr& expr) {
                 }
 
                 llvm::Function* function = it->second;
-                if (function->arg_size() != call.runtimeArguments.size()) {
+                if (function->arg_size() != suppliedArguments.size()) {
                     diagnostics_.error(call.range, "wrong number of arguments for call to '" + ref->name + "'");
                     return {};
                 }
 
                 std::vector<llvm::Value*> args;
-                args.reserve(call.runtimeArguments.size());
+                args.reserve(suppliedArguments.size());
                 const FunctionDecl* functionDecl = functionDecls_[ref->name];
-                for (const auto& argument : call.runtimeArguments) {
-                    llvm::Value* value = emitExpr(*argument);
+                std::size_t suppliedIndex = 0;
+                for (std::size_t compileIndex = 0; compileIndex < functionDecl->compileParameters.size(); ++compileIndex, ++suppliedIndex) {
+                    llvm::Value* value = emitExpr(*suppliedArguments[suppliedIndex]);
                     if (value == nullptr) {
                         return {};
                     }
-                    args.push_back(castValueToType(value, functionDecl->runtimeParameters[args.size()].type));
+                    llvm::Type* targetType = lowerType(functionDecl->compileParameters[compileIndex].type);
+                    value = coerceArgumentValue(builder_, context_, value, targetType);
+                    args.push_back(castValueToType(value, functionDecl->compileParameters[compileIndex].type));
+                }
+                for (std::size_t runtimeIndex = 0; runtimeIndex < functionDecl->runtimeParameters.size(); ++runtimeIndex, ++suppliedIndex) {
+                    const Expr& argumentExpr = *suppliedArguments[suppliedIndex];
+                    llvm::Value* value = nullptr;
+                    const Type& parameterType = functionDecl->runtimeParameters[runtimeIndex].type;
+                    if (hasModifier(parameterType, TypeModifier::Ref) && argumentExpr.kind == ExprKind::Unary) {
+                        const auto& unary = static_cast<const UnaryExpr&>(argumentExpr);
+                        if (unary.op == UnaryOp::AddressOf) {
+                            Type operandType = inferExprType(*unary.operand);
+                            if (isArcOwnedType(operandType) || isWeakType(operandType) || isUniqueType(operandType)) {
+                                value = emitExpr(*unary.operand);
+                            }
+                        }
+                    }
+                    if (value == nullptr) {
+                        value = emitExpr(argumentExpr);
+                    }
+                    if (value == nullptr) {
+                        return {};
+                    }
+                    llvm::Type* targetType = lowerType(parameterType);
+                    value = coerceArgumentValue(builder_, context_, value, targetType);
+                    args.push_back(castValueToType(value, parameterType));
                 }
 
                 llvm::Value* callValue = builder_.CreateCall(function, args, function->getReturnType()->isVoidTy() ? "" : "calltmp");
@@ -204,8 +452,9 @@ llvm::Value* ModuleEmitter::emitLValue(const Expr& expr) {
 
     if (expr.kind == ExprKind::Member) {
         const auto& member = static_cast<const MemberExpr&>(expr);
-        Type baseType = inferExprType(*member.base);
-        auto layoutIt = aggregateLayouts_.find(baseType.name);
+        auto className = inferClassTypeName(*member.base);
+        const std::string aggregateName = className.has_value() ? *className : inferExprType(*member.base).name;
+        auto layoutIt = aggregateLayouts_.find(aggregateName);
         if (layoutIt == aggregateLayouts_.end()) {
             diagnostics_.error(expr.range, "member access base is not a lowered aggregate type");
             return nullptr;
@@ -219,7 +468,19 @@ llvm::Value* ModuleEmitter::emitLValue(const Expr& expr) {
         if (baseAddress == nullptr) {
             return nullptr;
         }
-        llvm::StructType* aggregateType = structTypes_.at(baseType.name);
+        if (className.has_value()) {
+            llvm::Type* baseValueType = lowerType(inferExprType(*member.base));
+            if (baseValueType->isPointerTy()) {
+                llvm::Value* objectValue = builder_.CreateLoad(baseValueType, baseAddress, member.member + ".base");
+                if (!objectValue->getType()->isPointerTy()) {
+                    diagnostics_.error(expr.range, "class member access requires a pointer-like base value");
+                    return nullptr;
+                }
+                return builder_.CreateStructGEP(structTypes_.at(*className), objectValue, static_cast<unsigned>(fieldIt->second), member.member + ".addr");
+            }
+            return builder_.CreateStructGEP(structTypes_.at(*className), baseAddress, static_cast<unsigned>(fieldIt->second), member.member + ".addr");
+        }
+        llvm::StructType* aggregateType = structTypes_.at(aggregateName);
         return builder_.CreateStructGEP(aggregateType, baseAddress, static_cast<unsigned>(fieldIt->second), member.member + ".addr");
     }
 
@@ -292,11 +553,24 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                         diagnostics_.error(unary.range, "cannot dereference a non-pointer value");
                         return nullptr;
                     }
-                    return builder_.CreateLoad(llvm::Type::getInt32Ty(context_), pointer, "deref");
+                    Type pointeeType = inferExprType(expr);
+                    return builder_.CreateLoad(lowerType(pointeeType), pointer, "deref");
                 }
                 case UnaryOp::LogicalNot: {
                     llvm::Value* value = emitExpr(*unary.operand);
-                    return value ? builder_.CreateNot(value, "nottmp") : nullptr;
+                    if (value == nullptr) {
+                        return nullptr;
+                    }
+                    if (!value->getType()->isIntegerTy(1)) {
+                        if (value->getType()->isPointerTy()) {
+                            value = builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "not.ptrbool");
+                        } else if (value->getType()->isFloatingPointTy()) {
+                            value = builder_.CreateFCmpONE(value, llvm::ConstantFP::get(value->getType(), 0.0), "not.fpbool");
+                        } else if (value->getType()->isIntegerTy()) {
+                            value = builder_.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0), "not.intbool");
+                        }
+                    }
+                    return builder_.CreateNot(value, "nottmp");
                 }
                 case UnaryOp::BitwiseNot: {
                     llvm::Value* value = emitExpr(*unary.operand);
@@ -304,11 +578,20 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                 }
                 case UnaryOp::IsNonNull: {
                     llvm::Value* value = emitExpr(*unary.operand);
-                    if (value == nullptr || !value->getType()->isPointerTy()) {
-                        diagnostics_.error(unary.range, "postfix '?' currently requires a pointer value");
+                    if (value == nullptr) {
                         return nullptr;
                     }
-                    return builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "nonnull");
+                    if (value->getType()->isPointerTy()) {
+                        return builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "nonnull");
+                    }
+                    if (value->getType()->isFloatingPointTy()) {
+                        return builder_.CreateFCmpONE(value, llvm::ConstantFP::get(value->getType(), 0.0), "nonnull.fp");
+                    }
+                    if (value->getType()->isIntegerTy()) {
+                        return builder_.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0), "nonnull.int");
+                    }
+                    diagnostics_.error(unary.range, "postfix '?' currently requires a nullable or pointer-like value");
+                    return nullptr;
                 }
             }
             return nullptr;
@@ -320,6 +603,16 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                 llvm::Value* value = emitExpr(*binary.rhs);
                 if (address == nullptr || value == nullptr) {
                     return nullptr;
+                }
+                if (binary.lhs->kind == ExprKind::DeclRef) {
+                    const auto& lhsRef = static_cast<const DeclRefExpr&>(*binary.lhs);
+                    auto symbol = lookupSymbol(lhsRef.name);
+                    if (symbol.has_value()) {
+                        releaseStoredValue(address, symbol->type);
+                        if (shouldRetainForStorage(*binary.rhs, symbol->type)) {
+                            value = retainForStorage(value, symbol->type);
+                        }
+                    }
                 }
                 builder_.CreateStore(value, address);
                 return value;
@@ -337,6 +630,47 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                 if (value == nullptr || start == nullptr || end == nullptr) {
                     return nullptr;
                 }
+
+                auto enumNameFromExpr = [&](const Expr& enumExpr) -> std::optional<std::string> {
+                    auto qualified = moduleQualifiedName(enumExpr);
+                    if (!qualified.has_value()) {
+                        return std::nullopt;
+                    }
+                    const std::size_t split = qualified->find('.');
+                    if (split == std::string::npos) {
+                        return std::nullopt;
+                    }
+                    const std::string root = qualified->substr(0, split);
+                    if (enumValues_.contains(root)) {
+                        return root;
+                    }
+                    return std::nullopt;
+                };
+
+                if (auto enumName = enumNameFromExpr(*range->start); enumName.has_value()) {
+                    if (auto* valueConst = llvm::dyn_cast<llvm::ConstantInt>(value)) {
+                        if (auto* startConst = llvm::dyn_cast<llvm::ConstantInt>(start)) {
+                            if (auto* endConst = llvm::dyn_cast<llvm::ConstantInt>(end)) {
+                                const std::uint64_t lhs = valueConst->getZExtValue();
+                                const std::uint64_t startOrdinal = startConst->getZExtValue();
+                                const std::uint64_t endOrdinal = endConst->getZExtValue();
+                                const std::uint64_t maxOrdinal = enumValues_.at(*enumName).maxOrdinal;
+                                std::uint64_t current = startOrdinal;
+                                do {
+                                    if (current == lhs) {
+                                        return llvm::ConstantInt::getBool(context_, true);
+                                    }
+                                    if (current == endOrdinal) {
+                                        return llvm::ConstantInt::getBool(context_, range->inclusive);
+                                    }
+                                    current = current == maxOrdinal ? 0 : current + 1;
+                                } while (current != startOrdinal);
+                                return llvm::ConstantInt::getBool(context_, false);
+                            }
+                        }
+                    }
+                }
+
                 llvm::Value* lower = builder_.CreateICmpSGE(value, start, "range.lower");
                 llvm::Value* upper = range->inclusive ? builder_.CreateICmpSLE(value, end, "range.upper") : builder_.CreateICmpSLT(value, end, "range.upper");
                 return builder_.CreateAnd(lower, upper, "inrange");
@@ -347,6 +681,19 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
             if (lhs == nullptr || rhs == nullptr) {
                 return nullptr;
             }
+
+            auto toBool = [&](llvm::Value* value, llvm::StringRef name) -> llvm::Value* {
+                if (value->getType()->isIntegerTy(1)) {
+                    return value;
+                }
+                if (value->getType()->isPointerTy()) {
+                    return builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), name);
+                }
+                if (value->getType()->isFloatingPointTy()) {
+                    return builder_.CreateFCmpONE(value, llvm::ConstantFP::get(value->getType(), 0.0), name);
+                }
+                return builder_.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0), name);
+            };
 
             const bool isFloat = lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy();
 
@@ -384,9 +731,9 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                 case BinaryOp::GreaterEqual:
                     return isFloat ? builder_.CreateFCmpOGE(lhs, rhs, "fge") : builder_.CreateICmpSGE(lhs, rhs, "ge");
                 case BinaryOp::LogicalAnd:
-                    return builder_.CreateAnd(lhs, rhs, "land");
+                    return builder_.CreateAnd(toBool(lhs, "land.lhs"), toBool(rhs, "land.rhs"), "land");
                 case BinaryOp::LogicalOr:
-                    return builder_.CreateOr(lhs, rhs, "lor");
+                    return builder_.CreateOr(toBool(lhs, "lor.lhs"), toBool(rhs, "lor.rhs"), "lor");
                 case BinaryOp::Set:
                     return builder_.CreateOr(lhs, rhs, "enum.set");
                 case BinaryOp::Unset: {
@@ -425,6 +772,53 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
         }
         case ExprKind::Member:
             if (const auto* member = dynamic_cast<const MemberExpr*>(&expr)) {
+                if (auto qualified = qualifiedNameFromExpr(expr); qualified.has_value()) {
+                    if (auto value = lookupEnumValueBySuffix(enumValues_, *qualified); value.has_value()) {
+                        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), *value, false);
+                    }
+                }
+                if (member->base->kind == ExprKind::Member) {
+                    const auto& nestedBase = static_cast<const MemberExpr&>(*member->base);
+                    if (auto qualifiedBase = moduleQualifiedName(*member->base); qualifiedBase.has_value()) {
+                        for (const auto& [enumName, info] : enumValues_) {
+                            const std::string prefix = enumName + ".";
+                            if (qualifiedBase->rfind(prefix, 0) == 0) {
+                                const std::string variant = qualifiedBase->substr(prefix.size());
+                                auto paramsIt = info.paramValues.find(variant);
+                                if (paramsIt != info.paramValues.end()) {
+                                    auto paramIt = paramsIt->second.find(member->member);
+                                    if (paramIt != paramsIt->second.end()) {
+                                        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), paramIt->second, false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (nestedBase.base->kind == ExprKind::Call) {
+                        const auto& call = static_cast<const CallExpr&>(*nestedBase.base);
+                        if (call.callee->kind == ExprKind::DeclRef && !call.runtimeArguments.empty()) {
+                            const auto& callee = static_cast<const DeclRefExpr&>(*call.callee);
+                            auto enumIt = enumValues_.find(callee.name);
+                            if (enumIt != enumValues_.end()) {
+                                llvm::Value* ordinalValue = emitExpr(*call.runtimeArguments[0]);
+                                if (auto* ordinalConst = llvm::dyn_cast_or_null<llvm::ConstantInt>(ordinalValue)) {
+                                    const std::uint64_t ordinal = ordinalConst->getZExtValue();
+                                    for (const auto& [variant, value] : enumIt->second.values) {
+                                        if (value == ordinal) {
+                                            auto paramsIt = enumIt->second.paramValues.find(variant);
+                                            if (paramsIt != enumIt->second.paramValues.end()) {
+                                                auto paramIt = paramsIt->second.find(member->member);
+                                                if (paramIt != paramsIt->second.end()) {
+                                                    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), paramIt->second, false);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if (auto qualified = moduleQualifiedName(expr); qualified.has_value()) {
                     for (const auto& [enumName, info] : enumValues_) {
                         const std::string prefix = enumName + ".";
@@ -442,6 +836,51 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                         }
                     }
                 }
+                if (auto className = inferClassTypeName(*member->base); className.has_value()) {
+                    auto layoutIt = aggregateLayouts_.find(*className);
+                    if (layoutIt != aggregateLayouts_.end()) {
+                        auto fieldIt = layoutIt->second.fieldIndices.find(member->member);
+                        if (fieldIt != layoutIt->second.fieldIndices.end()) {
+                            if (member->nullSafe) {
+                                llvm::Value* baseValue = emitExpr(*member->base);
+                                if (baseValue == nullptr) {
+                                    return nullptr;
+                                }
+                                if (!baseValue->getType()->isPointerTy()) {
+                                    diagnostics_.error(expr.range, "null-safe member access requires a pointer-like base value");
+                                    return nullptr;
+                                }
+                                llvm::BasicBlock* startBlock = builder_.GetInsertBlock();
+                                llvm::Function* parentFunction = startBlock->getParent();
+                                llvm::BasicBlock* loadBlock = llvm::BasicBlock::Create(context_, "nullsafe.member.load", parentFunction);
+                                llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(context_, "nullsafe.member.cont", parentFunction);
+                                llvm::Value* isNonNull = builder_.CreateICmpNE(
+                                    baseValue,
+                                    llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(baseValue->getType())),
+                                    "nullsafe.member.test");
+                                builder_.CreateCondBr(isNonNull, loadBlock, continueBlock);
+
+                                builder_.SetInsertPoint(loadBlock);
+                                llvm::Value* fieldAddress = builder_.CreateStructGEP(structTypes_.at(*className), baseValue, static_cast<unsigned>(fieldIt->second), member->member + ".addr");
+                                llvm::Type* fieldType = lowerType(layoutIt->second.fieldTypes[fieldIt->second]);
+                                llvm::Value* loadedValue = builder_.CreateLoad(fieldType, fieldAddress, member->member + ".load");
+                                llvm::BasicBlock* loadedFromBlock = builder_.GetInsertBlock();
+                                builder_.CreateBr(continueBlock);
+
+                                builder_.SetInsertPoint(continueBlock);
+                                auto* phi = builder_.CreatePHI(fieldType, 2, "nullsafe.member.result");
+                                phi->addIncoming(loadedValue, loadedFromBlock);
+                                phi->addIncoming(nullConstantForType(context_, fieldType), startBlock);
+                                return phi;
+                            }
+                            llvm::Value* fieldAddress = emitLValue(expr);
+                            if (fieldAddress == nullptr) {
+                                return nullptr;
+                            }
+                            return builder_.CreateLoad(lowerType(layoutIt->second.fieldTypes[fieldIt->second]), fieldAddress, member->member + ".load");
+                        }
+                    }
+                }
                 Type baseType = inferExprType(*member->base);
                 auto aggregateLayout = aggregateLayouts_.find(baseType.name);
                 if (aggregateLayout != aggregateLayouts_.end()) {
@@ -452,19 +891,6 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                             return nullptr;
                         }
                         return builder_.CreateLoad(lowerType(aggregateLayout->second.fieldTypes[fieldIt->second]), fieldAddress, member->member + ".load");
-                    }
-                }
-                if (auto className = inferClassTypeName(*member->base); className.has_value()) {
-                    auto layoutIt = aggregateLayouts_.find(*className);
-                    if (layoutIt != aggregateLayouts_.end()) {
-                        auto fieldIt = layoutIt->second.fieldIndices.find(member->member);
-                        if (fieldIt != layoutIt->second.fieldIndices.end()) {
-                            llvm::Value* fieldAddress = emitLValue(expr);
-                            if (fieldAddress == nullptr) {
-                                return nullptr;
-                            }
-                            return builder_.CreateLoad(lowerType(layoutIt->second.fieldTypes[fieldIt->second]), fieldAddress, member->member + ".load");
-                        }
                     }
                 }
                 if (auto className = inferClassTypeName(*member->base); className.has_value()) {
@@ -498,6 +924,16 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                         }
                     }
                 }
+                if (member->base->kind == ExprKind::Member) {
+                    if (auto nestedName = qualifiedNameFromExpr(expr); nestedName.has_value()) {
+                        for (const auto& [enumName, info] : enumValues_) {
+                            auto valueIt = info.values.find(*nestedName);
+                            if (valueIt != info.values.end()) {
+                                return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), valueIt->second, false);
+                            }
+                        }
+                    }
+                }
                 if (member->base->kind == ExprKind::Call) {
                     const auto& call = static_cast<const CallExpr&>(*member->base);
                     if (call.callee->kind == ExprKind::DeclRef && !call.runtimeArguments.empty()) {
@@ -522,6 +958,27 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                         }
                     }
                 }
+                if (member->base->kind == ExprKind::Initializer) {
+                    const auto& init = static_cast<const InitializerExpr&>(*member->base);
+                    auto enumIt = enumValues_.find(init.typeName);
+                    if (enumIt != enumValues_.end() && init.values.size() == 1) {
+                        llvm::Value* ordinalValue = emitExpr(*init.values[0]);
+                        if (auto* ordinalConst = llvm::dyn_cast_or_null<llvm::ConstantInt>(ordinalValue)) {
+                            const std::uint64_t ordinal = ordinalConst->getZExtValue();
+                            for (const auto& [variant, value] : enumIt->second.values) {
+                                if (value == ordinal) {
+                                    auto paramsIt = enumIt->second.paramValues.find(variant);
+                                    if (paramsIt != enumIt->second.paramValues.end()) {
+                                        auto paramIt = paramsIt->second.find(member->member);
+                                        if (paramIt != paramsIt->second.end()) {
+                                            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), paramIt->second, false);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             diagnostics_.error(expr.range, "member access codegen is not implemented yet");
             return nullptr;
@@ -532,6 +989,13 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                 std::uint64_t value = 0;
                 for (const auto& item : init.values) {
                     llvm::Value* lowered = emitExpr(*item);
+                    if (lowered == nullptr && item->kind == ExprKind::Member) {
+                        if (auto nestedName = qualifiedNameFromExpr(*item); nestedName.has_value()) {
+                            if (auto nestedValue = lookupEnumValueBySuffix(enumValues_, *nestedName); nestedValue.has_value()) {
+                                lowered = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), *nestedValue, false);
+                            }
+                        }
+                    }
                     if (auto* constant = llvm::dyn_cast_or_null<llvm::ConstantInt>(lowered)) {
                         value |= constant->getZExtValue();
                     } else {
@@ -559,6 +1023,20 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                     return nullptr;
                 }
                 aggregate = builder_.CreateInsertValue(aggregate, castValueToType(value, layoutIt->second.fieldTypes[i]), {static_cast<unsigned>(i)}, init.typeName + ".init");
+            }
+            const bool heapBackedClass = isClassType(Type {.name = init.typeName});
+            if (heapBackedClass || init.initKind != InitKind::Value) {
+                llvm::Value* rawHeap = builder_.CreateCall(
+                    runtime_.arcAlloc,
+                    {llvm::ConstantInt::get(llvm::Type::getInt64Ty(context_), module_->getDataLayout().getTypeAllocSize(it->second))},
+                    init.typeName + ".heap.raw");
+                llvm::Value* typedHeap = builder_.CreatePointerCast(rawHeap, llvm::PointerType::get(it->second, 0), init.typeName + ".heap");
+                builder_.CreateStore(aggregate, typedHeap);
+                if (init.initKind == InitKind::Weak) {
+                    llvm::Value* weakObject = builder_.CreateCall(runtime_.weakInit, {rawHeap}, init.typeName + ".weak");
+                    return builder_.CreatePointerCast(weakObject, llvm::PointerType::get(it->second, 0), init.typeName + ".weak.cast");
+                }
+                return typedHeap;
             }
             return aggregate;
         }

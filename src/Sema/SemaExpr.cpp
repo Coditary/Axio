@@ -7,6 +7,27 @@
 
 namespace axc {
 
+namespace {
+
+std::optional<std::uint64_t> lookupEnumValueBySuffix(const std::unordered_map<std::string, EnumInfo>& enumInfos,
+                                                    std::string_view qualifiedName) {
+    for (const auto& [enumName, info] : enumInfos) {
+        auto exactIt = info.values.find(std::string(qualifiedName));
+        if (exactIt != info.values.end()) {
+            return exactIt->second;
+        }
+        const std::string suffix = "." + std::string(qualifiedName);
+        for (const auto& [name, value] : info.values) {
+            if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                return value;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 std::optional<std::uint64_t> SemaImpl::evalExpr(const Expr& expr) const {
     switch (expr.kind) {
         case ExprKind::IntegerLiteral:
@@ -38,6 +59,13 @@ std::optional<std::uint64_t> SemaImpl::evalExpr(const Expr& expr) const {
                 }
             }
             const auto& member = static_cast<const MemberExpr&>(expr);
+            if (member.base->kind == ExprKind::Member) {
+                if (auto nestedName = qualifiedNameFromExpr(expr); nestedName.has_value()) {
+                    if (auto value = lookupEnumValueBySuffix(enumInfos_, *nestedName); value.has_value()) {
+                        return value;
+                    }
+                }
+            }
             if (member.base->kind == ExprKind::DeclRef) {
                 const auto& base = static_cast<const DeclRefExpr&>(*member.base);
                 auto enumIt = enumInfos_.find(base.name);
@@ -265,8 +293,6 @@ void SemaImpl::validateExpr(const Expr& expr) {
                 if (it != symbols_.end() && !it->second.nullable) {
                     diagnostics_.warning(unary.range, "null-check postfix '?' used on a value that is not known to be nullable");
                 }
-            } else if (unary.op == UnaryOp::IsNonNull) {
-                diagnostics_.warning(unary.range, "null-check postfix '?' is parsed but only partially lowered");
             }
             break;
         }
@@ -283,6 +309,15 @@ void SemaImpl::validateExpr(const Expr& expr) {
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             validateExpr(*call.callee);
+            const std::size_t suppliedArgumentCount = call.compileArguments.size() + call.runtimeArguments.size();
+            std::vector<const Expr*> suppliedArguments;
+            suppliedArguments.reserve(suppliedArgumentCount);
+            for (const auto& argument : call.compileArguments) {
+                suppliedArguments.push_back(argument.get());
+            }
+            for (const auto& argument : call.runtimeArguments) {
+                suppliedArguments.push_back(argument.get());
+            }
             if (call.callee->kind == ExprKind::Member) {
                 const auto& member = static_cast<const MemberExpr&>(*call.callee);
                 if (member.nullSafe && member.base->kind == ExprKind::DeclRef) {
@@ -295,20 +330,27 @@ void SemaImpl::validateExpr(const Expr& expr) {
                 std::optional<Type> baseType = exprType(*member.base);
                 if (baseType.has_value() && classInfos_.contains(baseType->name)) {
                     const auto& info = classInfos_.at(baseType->name);
+                    auto countIt = info.methodArgumentCounts.find(member.member);
+                    if (countIt != info.methodArgumentCounts.end() && suppliedArgumentCount != countIt->second) {
+                        diagnostics_.error(call.range, "wrong number of arguments for method '" + member.member + "'");
+                    }
                     auto methodIt = info.methodParamOwnerships.find(member.member);
                     if (methodIt != info.methodParamOwnerships.end()) {
-                        for (std::size_t i = 0; i < call.runtimeArguments.size() && i + 1 < methodIt->second.size(); ++i) {
-                            if (call.runtimeArguments[i]->kind != ExprKind::DeclRef) {
+                        const std::size_t compileParamCount = countIt != info.methodArgumentCounts.end() && countIt->second >= methodIt->second.size() - 1
+                            ? countIt->second - (methodIt->second.size() - 1)
+                            : 0;
+                        for (std::size_t i = compileParamCount; i < suppliedArguments.size() && i - compileParamCount + 1 < methodIt->second.size(); ++i) {
+                            if (suppliedArguments[i]->kind != ExprKind::DeclRef) {
                                 continue;
                             }
-                            const auto& argRef = static_cast<const DeclRefExpr&>(*call.runtimeArguments[i]);
+                            const auto& argRef = static_cast<const DeclRefExpr&>(*suppliedArguments[i]);
                             auto symIt = symbols_.find(argRef.name);
                             if (symIt == symbols_.end()) {
                                 continue;
                             }
-                            if (methodIt->second[i + 1] == ValueInfo::Ownership::Unique) {
+                            if (methodIt->second[i - compileParamCount + 1] == ValueInfo::Ownership::Unique) {
                                 if (symIt->second.ownership != ValueInfo::Ownership::Unique) {
-                                    diagnostics_.error(call.runtimeArguments[i]->range, "unique parameters require unique arguments");
+                                    diagnostics_.error(suppliedArguments[i]->range, "unique parameters require unique arguments");
                                 } else {
                                     consumedUnique_.insert(argRef.name);
                                 }
@@ -336,23 +378,30 @@ void SemaImpl::validateExpr(const Expr& expr) {
                 collectRepeatedUniqueUses(*arg, uniqueCallValues, "unique values cannot be passed more than once to the same call");
             }
             if (auto calleeName = moduleQualifiedName(*call.callee); calleeName.has_value()) {
+                auto countIt = functionArgumentCount_.find(*calleeName);
+                if (countIt != functionArgumentCount_.end() && suppliedArgumentCount != countIt->second) {
+                    diagnostics_.error(call.range, "wrong number of arguments for call to '" + *calleeName + "'");
+                }
                 auto fnIt = functionParamOwnership_.find(*calleeName);
                 if (fnIt != functionParamOwnership_.end()) {
-                    for (std::size_t i = 0; i < call.runtimeArguments.size() && i < fnIt->second.size(); ++i) {
-                        if (call.runtimeArguments[i]->kind != ExprKind::DeclRef) {
+                    const std::size_t compileParamCount = countIt != functionArgumentCount_.end() && countIt->second >= fnIt->second.size()
+                        ? countIt->second - fnIt->second.size()
+                        : 0;
+                    for (std::size_t i = compileParamCount; i < suppliedArguments.size() && i - compileParamCount < fnIt->second.size(); ++i) {
+                        if (suppliedArguments[i]->kind != ExprKind::DeclRef) {
                             continue;
                         }
-                        const auto& argRef = static_cast<const DeclRefExpr&>(*call.runtimeArguments[i]);
+                        const auto& argRef = static_cast<const DeclRefExpr&>(*suppliedArguments[i]);
                         auto symIt = symbols_.find(argRef.name);
                         if (symIt == symbols_.end()) {
                             continue;
                         }
-                        if (fnIt->second[i] == ValueInfo::Ownership::Unique) {
+                        if (fnIt->second[i - compileParamCount] == ValueInfo::Ownership::Unique) {
                             if (symIt->second.ownership != ValueInfo::Ownership::Unique) {
-                                diagnostics_.error(call.runtimeArguments[i]->range, "unique parameters require unique arguments");
-                            } else {
-                                consumedUnique_.insert(argRef.name);
-                            }
+                                diagnostics_.error(suppliedArguments[i]->range, "unique parameters require unique arguments");
+                                } else {
+                                    consumedUnique_.insert(argRef.name);
+                                }
                         }
                     }
                 }
@@ -374,9 +423,6 @@ void SemaImpl::validateExpr(const Expr& expr) {
                     }
                 }
             }
-            if (!call.compileArguments.empty()) {
-                diagnostics_.warning(call.range, "compile-time call arguments are parsed but not yet specialized in codegen");
-            }
             break;
         }
         case ExprKind::Member: {
@@ -389,17 +435,17 @@ void SemaImpl::validateExpr(const Expr& expr) {
                 if (it != symbols_.end() && it->second.nullable && !member.nullSafe) {
                     diagnostics_.warning(member.range, "member access may dereference a nullable value; use '?.' or guard it with 'if value?'");
                 }
+                if (member.nullSafe) {
+                    if (it != symbols_.end() && !it->second.nullable) {
+                        diagnostics_.warning(member.range, "null-safe member access used on a value that is not known to be nullable");
+                    }
+                }
             }
             std::optional<Type> baseType = exprType(*member.base);
             if (baseType.has_value() && classInfos_.contains(baseType->name)) {
                 const auto& info = classInfos_.at(baseType->name);
                 if (!info.fields.contains(member.member) && !info.methods.contains(member.member)) {
                     diagnostics_.error(member.range, "class '" + baseType->name + "' has no member '" + member.member + "'");
-                }
-            }
-            if (member.nullSafe) {
-                if (baseType.has_value() && !typeSupportsNullability(*baseType)) {
-                    diagnostics_.warning(member.range, "null-safe member access used on a value that is not known to be nullable");
                 }
             }
             break;
@@ -410,19 +456,21 @@ void SemaImpl::validateExpr(const Expr& expr) {
                 validateExpr(*value);
             }
             if (enumInfos_.contains(init.typeName) && enumInfos_[init.typeName].isFlags) {
-                const auto evaluated = evalExpr(expr);
-                if (!evaluated.has_value()) {
-                    diagnostics_.error(expr.range, "flag enum initializer must contain only compile-time enum members");
+                const auto& enumInfo = enumInfos_.at(init.typeName);
+                for (const auto& value : init.values) {
+                    auto evaluated = evalExpr(*value);
+                    if (!evaluated.has_value() && value->kind == ExprKind::Member) {
+                        if (auto nestedName = qualifiedNameFromExpr(*value); nestedName.has_value()) {
+                            if (auto nestedValue = lookupEnumValueBySuffix(enumInfos_, *nestedName); nestedValue.has_value()) {
+                                evaluated = nestedValue;
+                            }
+                        }
+                    }
+                    if (!evaluated.has_value()) {
+                        diagnostics_.error(expr.range, "flag enum initializer must contain only compile-time enum members");
+                        break;
+                    }
                 }
-            }
-            if (init.initKind == InitKind::Arc) {
-                diagnostics_.warning(expr.range, "ARC allocation syntax is parsed, but full ARC runtime semantics are not implemented yet");
-            }
-            if (init.initKind == InitKind::Weak) {
-                diagnostics_.warning(expr.range, "weak allocation syntax is parsed, but full weak lifetime semantics are not implemented yet");
-            }
-            if (init.initKind == InitKind::Unique) {
-                diagnostics_.warning(expr.range, "unique allocation syntax is parsed, but full move/destruction semantics are not implemented yet");
             }
             break;
         }

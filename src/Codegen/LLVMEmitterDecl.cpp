@@ -74,8 +74,17 @@ void ModuleEmitter::declareFunction(const FunctionDecl& declaration) {
         return;
     }
 
+    if (llvm::Function* existing = module_->getFunction(loweredName); existing != nullptr) {
+        functions_[loweredName] = existing;
+        functionDecls_[loweredName] = &declaration;
+        return;
+    }
+
     std::vector<llvm::Type*> params;
-    params.reserve(declaration.runtimeParameters.size());
+    params.reserve(declaration.compileParameters.size() + declaration.runtimeParameters.size());
+    for (const Parameter& param : declaration.compileParameters) {
+        params.push_back(lowerType(param.type));
+    }
     for (const Parameter& param : declaration.runtimeParameters) {
         params.push_back(lowerType(param.type));
     }
@@ -85,7 +94,12 @@ void ModuleEmitter::declareFunction(const FunctionDecl& declaration) {
 
     std::size_t index = 0;
     for (llvm::Argument& arg : function->args()) {
-        arg.setName(declaration.runtimeParameters[index++].name);
+        if (index < declaration.compileParameters.size()) {
+            arg.setName(declaration.compileParameters[index].name);
+        } else {
+            arg.setName(declaration.runtimeParameters[index - declaration.compileParameters.size()].name);
+        }
+        ++index;
     }
 
     for (const Annotation& annotation : declaration.annotations) {
@@ -135,10 +149,17 @@ void ModuleEmitter::defineFunction(const FunctionDecl& declaration) {
 
     std::size_t index = 0;
     for (llvm::Argument& arg : function->args()) {
-        const Parameter& parameter = declaration.runtimeParameters[index++];
+        const Parameter& parameter = index < declaration.compileParameters.size()
+            ? declaration.compileParameters[index]
+            : declaration.runtimeParameters[index - declaration.compileParameters.size()];
         llvm::AllocaInst* alloca = createEntryAlloca(function, arg.getType(), arg.getName());
-        builder_.CreateStore(&arg, alloca);
-        locals_[parameter.name] = Symbol {alloca, parameter.type};
+        llvm::Value* storedArg = &arg;
+        if (storedArg->getType()->isPointerTy()) {
+            storedArg = retainForStorage(storedArg, parameter.type);
+        }
+        builder_.CreateStore(storedArg, alloca);
+        locals_[parameter.name] = Symbol {alloca, parameter.type, isNullableStorageType(parameter.type)};
+        ++index;
     }
 
     if (!emitStmt(*declaration.body, declaration)) {
@@ -149,6 +170,7 @@ void ModuleEmitter::defineFunction(const FunctionDecl& declaration) {
 
     if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
         if (declaration.returnTypes.empty()) {
+            releaseLocals();
             builder_.CreateRetVoid();
         } else {
             diagnostics_.error(declaration.range, "control reaches end of non-void function '" + declaration.name + "'");

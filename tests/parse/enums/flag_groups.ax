@@ -1,0 +1,22 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+enum ActorState as Flags {
+    IsAlive,
+    Team as Flag {
+        Neutral,
+        Red,
+        Blue,
+    },
+    IsVisible,
+}
+
+fn main() int {
+    let state ActorState = ActorState{IsAlive, Team.Red}
+    return state
+}
+
+// CHECK: Enum ActorState
+// CHECK: Element IsAlive
+// CHECK: Element Team
+// CHECK: Element IsVisible
+// CHECK: Let state:ActorState

@@ -97,9 +97,16 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
         case ExprKind::Call:
             out_ << "Call\n";
             printExpr(*static_cast<const CallExpr&>(expr).callee, level + 1);
+            for (const auto& argument : static_cast<const CallExpr&>(expr).compileArguments) {
+                printExpr(*argument, level + 1);
+            }
+            for (const auto& argument : static_cast<const CallExpr&>(expr).runtimeArguments) {
+                printExpr(*argument, level + 1);
+            }
             break;
         case ExprKind::Member:
             out_ << "Member " << static_cast<const MemberExpr&>(expr).member << '\n';
+            printExpr(*static_cast<const MemberExpr&>(expr).base, level + 1);
             break;
         case ExprKind::Initializer:
             out_ << "Init " << static_cast<const InitializerExpr&>(expr).typeName;

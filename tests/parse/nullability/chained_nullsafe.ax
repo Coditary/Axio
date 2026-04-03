@@ -1,0 +1,24 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+class Node {
+    next Node
+
+    fn value() int {
+        return 1
+    }
+}
+
+fn main() int {
+    let root Node = null
+    if root? {
+        root?.next?.value()
+    }
+    return 0
+}
+
+// CHECK: Class Node
+// CHECK: Unary
+// CHECK: Call
+// CHECK: Member value
+// CHECK: Member next
+// CHECK: Ref root

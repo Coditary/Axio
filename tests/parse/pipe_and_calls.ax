@@ -1,7 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
-fn inc(x int) int {
-    return x + 1
+fn inc{step int}(x int) int {
+    return x + step
 }
 
 fn double(x int) int {
@@ -9,15 +9,17 @@ fn double(x int) int {
 }
 
 fn main() int {
-    let a int = 1->inc->double
+    let a int = 1->double
     let b int = inc{3}(a)
-    let c int = inc{3, a}()
-    let d int = inc{}(c)
-    return d
+    let c int = inc(3, b)
+    let d int = inc{3, c}()
+    let e int = inc{}(3, d)
+    return e
 }
 
 // CHECK: Let a:int
 // CHECK: Let b:int
 // CHECK: Let c:int
 // CHECK: Let d:int
+// CHECK: Let e:int
 // CHECK: Call

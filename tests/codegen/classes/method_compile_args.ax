@@ -1,0 +1,23 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+class User {
+    age int
+
+    fn bump{delta int}() int {
+        return 7 + delta
+    }
+}
+
+fn main() int {
+    let user = User(7)
+    let a int = user.bump{3}()
+    let b int = user.bump(4)
+    let c int = user.bump{5}()
+    return a + b + c
+}
+
+// CHECK: define i32 @User.bump(i32 %delta, %User %self)
+// CHECK: call i32 @User.bump(i32 3, %User
+// CHECK: call i32 @User.bump(i32 4, %User
+// CHECK: call i32 @User.bump(i32 5, %User

@@ -1,0 +1,15 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+fn main() int {
+    let value int = 7
+    let ptr int* = &value
+    return *ptr
+}
+
+// CHECK: alloca ptr
+// CHECK: alloca i32
+// CHECK: store i32 7
+// CHECK: store ptr %value
+// CHECK: load ptr, ptr %ptr
+// CHECK: load i32, ptr

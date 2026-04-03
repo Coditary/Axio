@@ -29,7 +29,10 @@ ValueInfo::Ownership SemaImpl::ownershipFromType(const Type& type) const {
             return ValueInfo::Ownership::Unique;
         }
     }
-    return ValueInfo::Ownership::Arc;
+    if (classInfos_.contains(type.name)) {
+        return ValueInfo::Ownership::Arc;
+    }
+    return ValueInfo::Ownership::Value;
 }
 
 ValueInfo::Ownership SemaImpl::ownershipFromInitKind(InitKind kind) const {
@@ -107,6 +110,9 @@ std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex)
             Type type;
             type.name = init.typeName;
             type.range = expr.range;
+            if (classInfos_.contains(init.typeName) || init.initKind != InitKind::Value) {
+                ++type.pointerDepth;
+            }
             return type;
         }
         case ExprKind::Call: {
@@ -116,6 +122,34 @@ std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex)
                 if (it != functionReturnTypes_.end() && valueIndex < it->second.size()) {
                     return it->second[valueIndex];
                 }
+            }
+            break;
+        }
+        case ExprKind::Unary: {
+            const auto& unary = static_cast<const UnaryExpr&>(expr);
+            if (unary.op == UnaryOp::IsNonNull) {
+                Type type;
+                type.name = "bool";
+                type.range = expr.range;
+                return type;
+            }
+            auto operandType = exprType(*unary.operand);
+            if (!operandType.has_value()) {
+                break;
+            }
+            if (unary.op == UnaryOp::AddressOf) {
+                ++operandType->pointerDepth;
+                operandType->range = expr.range;
+                return operandType;
+            }
+            if (unary.op == UnaryOp::Dereference) {
+                if (operandType->pointerDepth > 0) {
+                    --operandType->pointerDepth;
+                } else if (!operandType->modifiers.empty()) {
+                    operandType->modifiers.erase(operandType->modifiers.begin());
+                }
+                operandType->range = expr.range;
+                return operandType;
             }
             break;
         }
@@ -149,6 +183,7 @@ void SemaImpl::recordFunctionSignatures(TranslationUnit& translationUnit) {
             ownerships.push_back(ownershipFromType(param.type));
         }
         functionParamOwnership_[fn.name] = std::move(ownerships);
+        functionArgumentCount_[fn.name] = fn.compileParameters.size() + fn.runtimeParameters.size();
         functionReturnCount_[fn.name] = fn.returnTypes.size();
         functionReturnTypes_[fn.name] = fn.returnTypes;
     }
@@ -182,6 +217,7 @@ void SemaImpl::buildClassTables(TranslationUnit& translationUnit) {
             info.methods.insert(method->name);
             std::vector<ValueInfo::Ownership> ownerships;
             const auto& fn = static_cast<const FunctionDecl&>(*method);
+            info.methodArgumentCounts[method->name] = fn.compileParameters.size() + fn.runtimeParameters.size() - (fn.runtimeParameters.empty() ? 0U : 1U);
             for (const auto& param : fn.runtimeParameters) {
                 ownerships.push_back(ownershipFromType(param.type));
             }
@@ -195,7 +231,12 @@ ValueInfo SemaImpl::inferExpr(const Expr& expr) const {
     switch (expr.kind) {
         case ExprKind::Initializer: {
             const auto& init = static_cast<const InitializerExpr&>(expr);
-            return ValueInfo {ownershipFromInitKind(init.initKind), init.typeName, init.initKind != InitKind::Value};
+            const bool isClass = classInfos_.contains(init.typeName);
+            return ValueInfo {
+                isClass && init.initKind == InitKind::Value ? ValueInfo::Ownership::Arc : ownershipFromInitKind(init.initKind),
+                init.typeName,
+                false
+            };
         }
         case ExprKind::DeclRef: {
             const auto& ref = static_cast<const DeclRefExpr&>(expr);
@@ -210,10 +251,35 @@ ValueInfo SemaImpl::inferExpr(const Expr& expr) const {
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             if (auto calleeName = moduleQualifiedName(*call.callee); calleeName.has_value()) {
+                auto typeIt = functionReturnTypes_.find(*calleeName);
+                if (typeIt != functionReturnTypes_.end() && !typeIt->second.empty()) {
+                    const Type& returnType = typeIt->second.front();
+                    return ValueInfo {ownershipFromType(returnType), returnType.name, false};
+                }
                 auto sigIt = functionReturnCount_.find(*calleeName);
                 if (sigIt != functionReturnCount_.end()) {
-                    return ValueInfo {ValueInfo::Ownership::Unknown, "", true};
+                    return ValueInfo {ValueInfo::Ownership::Unknown, "", false};
                 }
+            }
+            if (call.callee->kind == ExprKind::Member) {
+                const auto& member = static_cast<const MemberExpr&>(*call.callee);
+                if (auto baseType = exprType(*member.base); baseType.has_value() && classInfos_.contains(baseType->name)) {
+                    const std::string loweredName = baseType->name + "." + member.member;
+                    auto typeIt = functionReturnTypes_.find(loweredName);
+                    if (typeIt != functionReturnTypes_.end() && !typeIt->second.empty()) {
+                        const Type& returnType = typeIt->second.front();
+                        return ValueInfo {ownershipFromType(returnType), returnType.name, false};
+                    }
+                }
+            }
+            return ValueInfo {};
+        }
+        case ExprKind::Unary: {
+            const auto& unary = static_cast<const UnaryExpr&>(expr);
+            if (unary.op == UnaryOp::AddressOf || unary.op == UnaryOp::Dereference) {
+                ValueInfo value = inferExpr(*unary.operand);
+                value.nullable = false;
+                return value;
             }
             return ValueInfo {};
         }

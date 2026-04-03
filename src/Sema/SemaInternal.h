@@ -37,6 +37,7 @@ struct ValueInfo {
 struct ClassInfo {
     std::unordered_set<std::string> fields {};
     std::unordered_set<std::string> methods {};
+    std::unordered_map<std::string, std::size_t> methodArgumentCounts {};
     std::unordered_map<std::string, std::vector<ValueInfo::Ownership>> methodParamOwnerships {};
 };
 
@@ -80,6 +81,7 @@ class SemaImpl {
     std::unordered_map<std::string, std::unordered_set<std::string>> structFields_ {};
     std::unordered_set<std::string> consumedUnique_ {};
     std::unordered_map<std::string, std::vector<ValueInfo::Ownership>> functionParamOwnership_ {};
+    std::unordered_map<std::string, std::size_t> functionArgumentCount_ {};
     std::unordered_map<std::string, std::size_t> functionReturnCount_ {};
     std::unordered_map<std::string, std::vector<Type>> functionReturnTypes_ {};
 };

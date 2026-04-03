@@ -47,6 +47,7 @@ set(AXC_CORE_SOURCES
     src/AST/ASTPrinterStmtExpr.cpp
     src/Meta/MetaPipelineAnnotations.cpp
     src/Meta/MetaPipelineEmbed.cpp
+    src/Runtime/AxioRuntime.cpp
 )
 
 list(REMOVE_ITEM AXC_CORE_SOURCES src/main.cpp)
@@ -99,11 +100,12 @@ target_link_libraries(axc_core PUBLIC ${AXC_LLVM_LIBS})
 target_link_libraries(axc PRIVATE axc_core)
 
 if(BUILD_TESTING)
+    file(GLOB_RECURSE AXC_UNIT_TEST_SOURCES CONFIGURE_DEPENDS tests/unit/*.cpp)
     add_executable(axc_unit_tests
-        tests/unit/CompilerUnitTests.cpp
+        ${AXC_UNIT_TEST_SOURCES}
     )
     target_link_libraries(axc_unit_tests PRIVATE axc_core)
-    target_include_directories(axc_unit_tests PRIVATE include ${LLVM_INCLUDE_DIRS})
+    target_include_directories(axc_unit_tests PRIVATE include tests/unit ${LLVM_INCLUDE_DIRS})
     add_test(NAME axc_unit_tests COMMAND axc_unit_tests)
 endif()
 

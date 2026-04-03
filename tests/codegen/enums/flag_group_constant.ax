@@ -1,0 +1,20 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+enum ActorState as Flags {
+    IsAlive,
+    Team as Flag {
+        Neutral,
+        Red,
+        Blue,
+    },
+    IsVisible,
+}
+
+fn main() int {
+    let state ActorState = ActorState{IsAlive, Team.Blue}
+    return state
+}
+
+// CHECK: define i32 @main()
+// CHECK: ret i32

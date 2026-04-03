@@ -1,0 +1,8 @@
+// RUN: not %axc %s -o %t 2>&1 | %filecheck %s
+
+fn main() int {
+    let value int = 7
+    return *value
+}
+
+// CHECK: error: cannot dereference a non-pointer value

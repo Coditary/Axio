@@ -1,0 +1,16 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+class Node {
+    next Node
+    value int
+}
+
+fn main() int {
+    let root Node = new Node(new Node(null, 7), 3)
+    if root? {
+        return root.next.value
+    }
+    return 0
+}
+
+// CHECK-NOT: warning: member access may dereference a nullable value

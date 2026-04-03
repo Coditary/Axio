@@ -33,7 +33,7 @@ test-unit: build
 test-lit: build
 	$(LIT) tests/codegen tests/generated tests/parse tests/runtime tests/sema tests/spec
 
-test: test-unit test-lit clean-test
+test: test-unit test-lit clean-tests
 
 check: test-all
 

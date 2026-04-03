@@ -1,4 +1,4 @@
-// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+// RUN: %axc --check-only %s
 
 class Obj {
     value int
@@ -15,7 +15,3 @@ fn main() int {
     keep(arc, weak_ref, unique)
     return 0
 }
-
-// CHECK: warning: ARC ownership is parsed, but full retain/release semantics are not implemented yet
-// CHECK: warning: weak ownership is parsed, but full weak lifetime semantics are not implemented yet
-// CHECK: warning: unique allocation syntax is parsed, but full move/destruction semantics are not implemented yet

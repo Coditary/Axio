@@ -5,4 +5,4 @@ fn main() bool {
     return 1.5 < 2.5
 }
 
-// CHECK: fcmp olt
+// CHECK: ret i1 true

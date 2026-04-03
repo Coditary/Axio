@@ -44,19 +44,17 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
             }
 
             if (functionDecl.returnTypes.size() <= 1) {
-                llvm::Value* value = returnedValues.front();
-                llvm::Type* targetType = lowerType(functionReturnType(functionDecl));
-                if (value->getType() != targetType) {
-                    if (targetType->isIntegerTy() && value->getType()->isIntegerTy()) {
-                        value = builder_.CreateIntCast(value, targetType, true, "retcast");
-                    } else if (targetType->isFloatingPointTy() && value->getType()->isFloatingPointTy()) {
-                        value = builder_.CreateFPCast(value, targetType, "retfpcast");
-                    } else if (targetType->isFloatingPointTy() && value->getType()->isIntegerTy()) {
-                        value = builder_.CreateSIToFP(value, targetType, "retitofp");
-                    } else if (targetType->isIntegerTy() && value->getType()->isFloatingPointTy()) {
-                        value = builder_.CreateFPToSI(value, targetType, "retfptosi");
-                    }
+                llvm::Value* value = castValueToType(returnedValues.front(), functionReturnType(functionDecl));
+                if (value == nullptr) {
+                    return false;
                 }
+                if (value->getType()->isPointerTy()) {
+                    value = retainForStorage(value, functionReturnType(functionDecl));
+                } else if (isArcOwnedType(functionReturnType(functionDecl))) {
+                    diagnostics_.error(ret.range, "ARC-backed class returns must lower to pointer values");
+                    return false;
+                }
+                releaseLocals();
                 builder_.CreateRet(value);
                 return true;
             }
@@ -64,8 +62,12 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
             llvm::Value* aggregate = llvm::UndefValue::get(loweredReturnType);
             for (std::size_t i = 0; i < functionDecl.returnTypes.size(); ++i) {
                 llvm::Value* value = castValueToType(returnedValues[i], functionDecl.returnTypes[i]);
+                if (value != nullptr && value->getType()->isPointerTy()) {
+                    value = retainForStorage(value, functionDecl.returnTypes[i]);
+                }
                 aggregate = builder_.CreateInsertValue(aggregate, value, {static_cast<unsigned>(i)}, "ret.insert");
             }
+            releaseLocals();
             builder_.CreateRet(aggregate);
             return true;
         }
@@ -96,6 +98,10 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 Type storageType = !binding.explicitType.name.empty() ? binding.explicitType : inferExprType(*letStmt.initializer, i);
                 storageType.range = binding.range;
 
+                if (isArcOwnedType(storageType) && storageType.pointerDepth == 0) {
+                    ++storageType.pointerDepth;
+                }
+
                 llvm::Type* llvmType = lowerType(storageType);
                 llvm::AllocaInst* alloca = createEntryAlloca(currentFunction_, llvmType, binding.name);
                 const bool nullable = letStmt.initializer != nullptr && (letStmt.initializer->kind == ExprKind::NullLiteral ||
@@ -103,7 +109,11 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 locals_[binding.name] = Symbol {alloca, storageType, nullable};
 
                 if (i < initializerValues.size()) {
-                    builder_.CreateStore(castValueToType(initializerValues[i], storageType), alloca);
+                    llvm::Value* stored = castValueToType(initializerValues[i], storageType);
+                    if (letStmt.initializer != nullptr && shouldRetainForStorage(*letStmt.initializer, storageType)) {
+                        stored = retainForStorage(stored, storageType);
+                    }
+                    builder_.CreateStore(stored, alloca);
                 }
             }
             return true;
@@ -129,9 +139,12 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
             if (!emitStmt(*ifStmt.thenBlock, functionDecl)) {
                 return false;
             }
-            if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
+            const bool thenTerminated = builder_.GetInsertBlock()->getTerminator() != nullptr;
+            if (!thenTerminated) {
                 builder_.CreateBr(mergeBlock);
             }
+
+            bool elseTerminated = false;
 
             if (ifStmt.elseBranch) {
                 function->insert(function->end(), elseBlock);
@@ -139,13 +152,17 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 if (!emitStmt(*ifStmt.elseBranch, functionDecl)) {
                     return false;
                 }
-                if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
+                elseTerminated = builder_.GetInsertBlock()->getTerminator() != nullptr;
+                if (!elseTerminated) {
                     builder_.CreateBr(mergeBlock);
                 }
             }
 
             function->insert(function->end(), mergeBlock);
             builder_.SetInsertPoint(mergeBlock);
+            if (ifStmt.elseBranch && thenTerminated && elseTerminated) {
+                builder_.CreateUnreachable();
+            }
             return true;
         }
     }

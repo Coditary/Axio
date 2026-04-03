@@ -90,9 +90,11 @@ std::unique_ptr<Stmt> Parser::parseLetStmt() {
 
 LetBinding Parser::parseLetBinding() {
     LetBinding binding;
-    if (!expect(TokenKind::Identifier, "expected variable name after 'let'")) {
+    if (!(check(TokenKind::Identifier) || check(TokenKind::KwWeak))) {
+        diagnostics_.error(current().range, "expected variable name after 'let'");
         return binding;
     }
+    advance();
 
     binding.name = previous().lexeme;
     binding.range = previous().range;

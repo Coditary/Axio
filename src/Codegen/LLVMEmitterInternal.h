@@ -46,6 +46,16 @@ struct Symbol {
     bool nullable = false;
 };
 
+struct RuntimeFunctions {
+    llvm::Function* arcAlloc = nullptr;
+    llvm::Function* arcRetain = nullptr;
+    llvm::Function* arcRelease = nullptr;
+    llvm::Function* weakInit = nullptr;
+    llvm::Function* weakRelease = nullptr;
+    llvm::Function* weakLoad = nullptr;
+    llvm::Function* arcStrongCount = nullptr;
+};
+
 struct MultiValue {
     std::vector<llvm::Value*> values {};
 };
@@ -72,6 +82,7 @@ class ModuleEmitter {
     void collectEnum(const EnumDecl& declaration);
 
     bool isUnsignedType(const Type& type) const;
+    bool isNullableStorageType(const Type& type) const;
     llvm::Value* castValueToType(llvm::Value* value, const Type& targetType);
     llvm::Type* lowerType(const Type& type);
     bool isLowerableFunction(const FunctionDecl& declaration);
@@ -94,6 +105,15 @@ class ModuleEmitter {
     llvm::Value* emitExpr(const Expr& expr);
     bool emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl);
     void defineFunction(const FunctionDecl& declaration);
+    void declareRuntimeFunctions();
+    bool isArcOwnedType(const Type& type) const;
+    bool isWeakType(const Type& type) const;
+    bool isUniqueType(const Type& type) const;
+    bool isClassType(const Type& type) const;
+    llvm::Value* retainForStorage(llvm::Value* value, const Type& type);
+    bool shouldRetainForStorage(const Expr& expr, const Type& type) const;
+    void releaseStoredValue(llvm::Value* address, const Type& type);
+    void releaseLocals();
 
     const SourceManager& sourceManager_;
     DiagnosticEngine& diagnostics_;
@@ -109,6 +129,7 @@ class ModuleEmitter {
     std::unordered_map<std::string, std::unordered_set<std::string>> classFieldNames_ {};
     std::unordered_map<std::string, std::unordered_set<std::string>> classMethodNames_ {};
     std::unordered_map<std::string, Symbol> locals_ {};
+    RuntimeFunctions runtime_ {};
 };
 
 std::string shellQuote(const std::filesystem::path& path);

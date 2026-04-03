@@ -78,8 +78,8 @@ std::unique_ptr<Expr> Parser::parseComparisonChain() {
             }
             auto endExpr = parseBitwiseOr();
             const SourceRange startRange = rhs->range;
-            rhs = std::make_unique<RangeExpr>(std::move(rhs), std::move(endExpr), inclusive, combine(startRange, rhs->range));
-            rhs->range = combine(startRange, static_cast<RangeExpr*>(rhs.get())->end->range);
+            const SourceRange endRange = endExpr->range;
+            rhs = std::make_unique<RangeExpr>(std::move(rhs), std::move(endExpr), inclusive, combine(startRange, endRange));
         }
 
         ranges.push_back(rhs->range);
@@ -200,6 +200,15 @@ std::unique_ptr<Expr> Parser::parseUnary() {
     }
     if (match(TokenKind::Star)) {
         const SourceRange opRange = previous().range;
+        if (check(TokenKind::Identifier) && index_ + 1 < tokens_.size() && tokens_[index_ + 1].kind == TokenKind::LParen &&
+            !current().lexeme.empty() && std::isupper(static_cast<unsigned char>(current().lexeme.front()))) {
+            advance();
+            const std::string typeName = previous().lexeme;
+            expect(TokenKind::LParen, "expected '(' after type name");
+            auto args = parseArgumentList(TokenKind::RParen);
+            expect(TokenKind::RParen, "expected ')' after initializer arguments");
+            return std::make_unique<InitializerExpr>(typeName, std::move(args), InitKind::Unique, combine(opRange, previous().range));
+        }
         auto operand = parseUnary();
         return std::make_unique<UnaryExpr>(UnaryOp::Dereference, std::move(operand), combine(opRange, operand->range));
     }
@@ -240,9 +249,13 @@ std::unique_ptr<Expr> Parser::parsePostfix() {
             }
         }
 
-        if (!isCompileArgCallStart() && check(TokenKind::LBrace)) {
+        if (!isCompileArgCallStart() && check(TokenKind::LBrace) && expr->kind == ExprKind::DeclRef) {
             const auto qualifiedName = qualifiedNameFromExpr(*expr);
             if (!qualifiedName.has_value()) {
+                break;
+            }
+            const std::string simpleName = lastQualifiedSegment(*qualifiedName);
+            if (simpleName.empty() || !std::isupper(static_cast<unsigned char>(simpleName.front()))) {
                 break;
             }
             const SourceRange start = expr->range;

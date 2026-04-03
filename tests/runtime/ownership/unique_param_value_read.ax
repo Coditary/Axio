@@ -1,0 +1,15 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "7"
+
+class Obj {
+    value int
+}
+
+fn read(x *Obj) int {
+    return x.value
+}
+
+fn main() int {
+    let value *Obj = *Obj(7)
+    return read(value)
+}

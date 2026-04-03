@@ -1,0 +1,16 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "13"
+
+class User {
+    age int
+
+    fn bump() int {
+        return self.age + 1
+    }
+}
+
+fn main() int {
+    let user User = new User(7)
+    user.age = 12
+    return user.bump()
+}

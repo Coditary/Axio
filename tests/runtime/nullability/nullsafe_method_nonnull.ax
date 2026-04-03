@@ -1,0 +1,15 @@
+// RUN: %axc %s -o %tbin
+// RUN: %tbin; test "$?" = "7"
+
+class Box {
+    value int
+
+    fn get() int {
+        return self.value
+    }
+}
+
+fn main() int {
+    let box Box = new Box(7)
+    return box?.get()
+}
