@@ -6,10 +6,13 @@
 
 namespace axc {
 
+/// @brief Utility for producing a human-readable tree dump of the AST.
 class ASTPrinter {
   public:
+    /// @brief Create a printer writing to `out`.
     explicit ASTPrinter(std::ostream& out);
 
+    /// @brief Print a translation unit and all nested declarations.
     void print(const TranslationUnit& unit) const;
 
   private:

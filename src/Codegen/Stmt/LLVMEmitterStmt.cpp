@@ -1,3 +1,6 @@
+/// @file
+/// @brief LLVM lowering for statements, structured control flow, switch dispatch, and defer handling.
+
 #include "../Internal/LLVMEmitterInternal.h"
 
 #include "axc/Support/Diagnostic.h"

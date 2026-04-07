@@ -57,6 +57,28 @@ cmake -S . -B build
 cmake --build build -j
 ```
 
+## API Documentation
+
+Axio uses Doxygen-compatible inline comments in public headers and key internal
+workflow headers.
+
+The generated docs are not limited to public facades. Private methods and core
+internal workflow helpers are documented too, so you can inspect what a method
+exists for even when it is not part of the external API.
+
+If `doxygen` is installed, generate browsable HTML and machine-readable XML:
+
+```bash
+make docs
+```
+
+Outputs:
+
+- `docs/api/html/index.html`
+- `docs/api/xml/`
+
+See `docs/API_DOCS.md` for details on coverage and intended usage.
+
 ## Run
 
 Compile a source file to LLVM IR, object file, and native binary:

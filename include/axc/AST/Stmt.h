@@ -4,6 +4,7 @@
 
 namespace axc {
 
+/// @brief Statement categories supported by the AST.
 enum class StmtKind {
     Compound,
     Return,
@@ -20,6 +21,7 @@ enum class StmtKind {
     Continue,
 };
 
+/// @brief Base class for all statement nodes.
 struct Stmt {
     explicit Stmt(StmtKind kind, SourceRange range) : kind(kind), range(range) {}
     virtual ~Stmt() = default;
@@ -28,12 +30,14 @@ struct Stmt {
     SourceRange range;
 };
 
+/// @brief Block statement containing nested statements.
 struct CompoundStmt final : Stmt {
     explicit CompoundStmt(SourceRange range) : Stmt(StmtKind::Compound, range) {}
 
     std::vector<std::unique_ptr<Stmt>> statements {};
 };
 
+/// @brief Return statement supporting multiple return values.
 struct ReturnStmt final : Stmt {
     ReturnStmt(std::vector<std::unique_ptr<Expr>> values, SourceRange range)
         : Stmt(StmtKind::Return, range), values(std::move(values)) {}
@@ -41,6 +45,7 @@ struct ReturnStmt final : Stmt {
     std::vector<std::unique_ptr<Expr>> values {};
 };
 
+/// @brief Deferred call executed when the current scope exits.
 struct DeferStmt final : Stmt {
     DeferStmt(std::unique_ptr<Expr> call, SourceRange range)
         : Stmt(StmtKind::Defer, range), call(std::move(call)) {}
@@ -48,6 +53,7 @@ struct DeferStmt final : Stmt {
     std::unique_ptr<Expr> call;
 };
 
+/// @brief Statement wrapper around an expression.
 struct ExprStmt final : Stmt {
     ExprStmt(std::unique_ptr<Expr> expression, SourceRange range)
         : Stmt(StmtKind::Expr, range), expression(std::move(expression)) {}
@@ -55,12 +61,14 @@ struct ExprStmt final : Stmt {
     std::unique_ptr<Expr> expression;
 };
 
+/// @brief Single binding introduced by a `let` or `const` statement.
 struct LetBinding {
     std::string name {};
     Type explicitType {};
     SourceRange range {};
 };
 
+/// @brief Local variable declaration statement.
 struct LetStmt final : Stmt {
     LetStmt(std::vector<LetBinding> bindings, std::unique_ptr<Expr> initializer, bool mutableStorage, SourceRange range)
         : Stmt(StmtKind::Let, range), bindings(std::move(bindings)), initializer(std::move(initializer)), mutableStorage(mutableStorage) {}
@@ -70,6 +78,7 @@ struct LetStmt final : Stmt {
     bool mutableStorage = true;
 };
 
+/// @brief Conditional statement with optional `else` branch.
 struct IfStmt final : Stmt {
     IfStmt(std::unique_ptr<Expr> condition,
            std::unique_ptr<CompoundStmt> thenBlock,
@@ -85,6 +94,7 @@ struct IfStmt final : Stmt {
     std::unique_ptr<Stmt> elseBranch;
 };
 
+/// @brief `while` loop statement.
 struct WhileStmt final : Stmt {
     WhileStmt(std::unique_ptr<Expr> condition, std::unique_ptr<CompoundStmt> body, SourceRange range)
         : Stmt(StmtKind::While, range), condition(std::move(condition)), body(std::move(body)) {}
@@ -93,6 +103,7 @@ struct WhileStmt final : Stmt {
     std::unique_ptr<CompoundStmt> body;
 };
 
+/// @brief C-style `for` loop with initializer, condition, and step.
 struct ForStmt final : Stmt {
     ForStmt(std::unique_ptr<Stmt> initializer,
             std::unique_ptr<Expr> condition,
@@ -111,6 +122,7 @@ struct ForStmt final : Stmt {
     std::unique_ptr<CompoundStmt> body;
 };
 
+/// @brief `foreach` loop over an iterable value.
 struct ForeachStmt final : Stmt {
     ForeachStmt(std::string bindingName,
                 Type bindingType,
@@ -132,6 +144,7 @@ struct ForeachStmt final : Stmt {
     SourceRange bindingRange {};
 };
 
+/// @brief `do { ... } while cond` loop statement.
 struct DoWhileStmt final : Stmt {
     DoWhileStmt(std::unique_ptr<CompoundStmt> body, std::unique_ptr<Expr> condition, SourceRange range)
         : Stmt(StmtKind::DoWhile, range), body(std::move(body)), condition(std::move(condition)) {}
@@ -140,12 +153,14 @@ struct DoWhileStmt final : Stmt {
     std::unique_ptr<Expr> condition;
 };
 
+/// @brief Single switch-case pattern, either an exact value or a range.
 struct SwitchCasePattern {
     std::unique_ptr<Expr> value;
     bool isRange = false;
     SourceRange range {};
 };
 
+/// @brief One `case` or `default` arm inside a switch statement.
 struct SwitchCase {
     std::vector<SwitchCasePattern> patterns {};
     std::unique_ptr<CompoundStmt> body;
@@ -153,6 +168,7 @@ struct SwitchCase {
     SourceRange range {};
 };
 
+/// @brief `switch` statement over constant case patterns and ranges.
 struct SwitchStmt final : Stmt {
     SwitchStmt(std::unique_ptr<Expr> condition, std::vector<SwitchCase> cases, SourceRange range)
         : Stmt(StmtKind::Switch, range), condition(std::move(condition)), cases(std::move(cases)) {}
@@ -161,10 +177,12 @@ struct SwitchStmt final : Stmt {
     std::vector<SwitchCase> cases {};
 };
 
+/// @brief `break` statement.
 struct BreakStmt final : Stmt {
     explicit BreakStmt(SourceRange range) : Stmt(StmtKind::Break, range) {}
 };
 
+/// @brief `continue` statement.
 struct ContinueStmt final : Stmt {
     explicit ContinueStmt(SourceRange range) : Stmt(StmtKind::Continue, range) {}
 };

@@ -3,7 +3,7 @@ CMAKE ?= cmake
 CTEST ?= ctest
 LIT ?= lit
 
-.PHONY: help configure build rebuild check test test-unit test-lit test-all clean coverage lint format
+.PHONY: help configure build rebuild check test test-unit test-lit test-all docs clean coverage lint format
 
 help:
 	@printf "Targets:\n"
@@ -14,6 +14,7 @@ help:
 	@printf "  test-unit   Run CTest unit tests\n"
 	@printf "  test-lit    Run lit integration tests\n"
 	@printf "  test-all    Run unit tests and lit suite\n"
+	@printf "  docs        Generate API docs with Doxygen\n"
 	@printf "  lint        Run available static checks\n"
 	@printf "  format      Show formatting tool status\n"
 	@printf "  coverage    Build with coverage and print llvm-cov report\n"
@@ -32,6 +33,15 @@ test-unit: build
 
 test-lit: build
 	$(LIT) tests/codegen tests/generated tests/parse tests/runtime tests/sema tests/spec
+
+docs:
+	@if command -v doxygen >/dev/null 2>&1; then \
+		doxygen Doxyfile; \
+		printf "API docs written to docs/api/html/index.html and docs/api/xml/\n"; \
+	else \
+		printf "doxygen not installed. Install it and rerun 'make docs'.\n"; \
+		exit 1; \
+	fi
 
 test: test-unit test-lit clean-tests
 

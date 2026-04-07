@@ -1,3 +1,6 @@
+/// @file
+/// @brief Recursive module loading, import resolution, qualification, and merge orchestration.
+
 #include "ModuleLoader.h"
 
 #include <utility>

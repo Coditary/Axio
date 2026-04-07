@@ -6,6 +6,7 @@
 
 namespace axc {
 
+/// @brief Token kinds emitted by the lexer.
 enum class TokenKind {
     EndOfFile,
     Newline,
@@ -132,12 +133,14 @@ enum class TokenKind {
     FatArrow,
 };
 
+/// @brief Single lexed token with original source spelling and range.
 struct Token {
     TokenKind kind = TokenKind::EndOfFile;
     std::string lexeme {};
     SourceRange range {};
 };
 
+/// @brief Human-readable token name used in diagnostics and debug output.
 const char* tokenKindName(TokenKind kind);
 
 }  // namespace axc

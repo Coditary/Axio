@@ -19,10 +19,13 @@ class StatementParser;
 class ExpressionParser;
 }  // namespace detail
 
+/// @brief Recursive-descent parser building an AST from lexer tokens.
 class Parser {
   public:
+    /// @brief Create a parser for a token stream and diagnostic sink.
     Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics);
 
+    /// @brief Parse a full translation unit, including package and declarations.
     TranslationUnit parseTranslationUnit();
 
   private:

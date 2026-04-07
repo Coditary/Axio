@@ -8,100 +8,158 @@
 
 namespace axc::detail {
 
+/// @brief Top-level parsing helper used by `Parser`.
 class TopLevelParser {
   public:
+    /// @brief Bind the helper to the shared parser state.
     explicit TopLevelParser(Parser& parser);
 
+    /// @brief Parse the entire translation unit including package and declarations.
     TranslationUnit parseTranslationUnit();
+    /// @brief Parse a consecutive run of declaration annotations.
     std::vector<Annotation> parseAnnotations();
+    /// @brief Parse one preprocessor directive and append it to the translation unit.
     bool parsePreprocessorDirective(TranslationUnit& unit);
+    /// @brief Parse one top-level declaration from the current token.
     std::unique_ptr<Decl> parseTopLevelDecl();
 
   private:
     Parser& parser_;
 };
 
+/// @brief Declaration-oriented parser helper.
 class DeclarationParser {
   public:
+    /// @brief Bind the helper to the shared parser state.
     explicit DeclarationParser(Parser& parser);
 
+    /// @brief Parse one or more import declarations.
     std::vector<std::unique_ptr<ImportDecl>> parseImportDecls(std::vector<Annotation> annotations);
+    /// @brief Parse a global `let`/`const` declaration.
     std::unique_ptr<GlobalVarDecl> parseGlobalDecl(std::vector<Annotation> annotations, bool mutableStorage);
+    /// @brief Parse a function or method declaration.
     std::unique_ptr<FunctionDecl> parseFunctionDecl(std::vector<Annotation> annotations, bool isExtern, bool isMethod = false,
                                                     std::string receiverType = {});
+    /// @brief Parse a struct declaration.
     std::unique_ptr<StructDecl> parseStructDecl(std::vector<Annotation> annotations);
+    /// @brief Parse an enum declaration.
     std::unique_ptr<EnumDecl> parseEnumDecl(std::vector<Annotation> annotations);
+    /// @brief Parse a class declaration.
     std::unique_ptr<ClassDecl> parseClassDecl(std::vector<Annotation> annotations);
+    /// @brief Parse a type spelling.
     Type parseType();
+    /// @brief Parse a function parameter.
     Parameter parseParameter(bool isCompileTime);
+    /// @brief Parse a single return type or parenthesized multi-return list.
     std::vector<Type> parseReturnTypeList();
 
   private:
     Parser& parser_;
 };
 
+/// @brief Statement-oriented parser helper.
 class StatementParser {
   public:
+    /// @brief Bind the helper to the shared parser state.
     explicit StatementParser(Parser& parser);
 
+    /// @brief Parse a brace-delimited statement block.
     std::unique_ptr<CompoundStmt> parseCompoundStmt();
+    /// @brief Dispatch to the appropriate statement parser based on the current token.
     std::unique_ptr<Stmt> parseStatement();
+    /// @brief Parse a `return` statement.
     std::unique_ptr<Stmt> parseReturnStmt();
+    /// @brief Parse a `defer` statement.
     std::unique_ptr<Stmt> parseDeferStmt();
+    /// @brief Parse a local `let` or `const` statement.
     std::unique_ptr<Stmt> parseLetStmt();
+    /// @brief Parse one binding inside a `let`/`const` statement.
     LetBinding parseLetBinding();
+    /// @brief Parse an `if`/`else` statement.
     std::unique_ptr<Stmt> parseIfStmt();
+    /// @brief Parse a `while` loop.
     std::unique_ptr<Stmt> parseWhileStmt();
+    /// @brief Parse a C-style `for` loop.
     std::unique_ptr<Stmt> parseForStmt();
+    /// @brief Parse a `foreach` loop.
     std::unique_ptr<Stmt> parseForeachStmt();
+    /// @brief Parse a `do-while` loop.
     std::unique_ptr<Stmt> parseDoWhileStmt();
+    /// @brief Parse a `switch` statement and its case patterns.
     std::unique_ptr<Stmt> parseSwitchStmt();
+    /// @brief Parse a `break` statement.
     std::unique_ptr<Stmt> parseBreakStmt();
+    /// @brief Parse a `continue` statement.
     std::unique_ptr<Stmt> parseContinueStmt();
+    /// @brief Parse an expression statement.
     std::unique_ptr<Stmt> parseExprStmt();
 
   private:
     Parser& parser_;
 };
 
+/// @brief Expression-oriented parser helper split by precedence levels.
 class ExpressionParser {
   public:
+    /// @brief Bind the helper to the shared parser state.
     explicit ExpressionParser(Parser& parser);
 
+    /// @brief Parse a full expression.
     std::unique_ptr<Expr> parseExpression();
+    /// @brief Parse assignment expressions.
     std::unique_ptr<Expr> parseAssignment();
+    /// @brief Parse pipeline expressions.
     std::unique_ptr<Expr> parsePipe();
+    /// @brief Parse logical-or expressions.
     std::unique_ptr<Expr> parseLogicalOr();
+    /// @brief Parse logical-and expressions.
     std::unique_ptr<Expr> parseLogicalAnd();
+    /// @brief Parse comparison chains.
     std::unique_ptr<Expr> parseComparisonChain();
+    /// @brief Parse bitwise-or expressions.
     std::unique_ptr<Expr> parseBitwiseOr();
+    /// @brief Parse bitwise-xor expressions.
     std::unique_ptr<Expr> parseBitwiseXor();
+    /// @brief Parse bitwise-and expressions.
     std::unique_ptr<Expr> parseBitwiseAnd();
+    /// @brief Parse shift expressions.
     std::unique_ptr<Expr> parseShift();
+    /// @brief Parse additive expressions.
     std::unique_ptr<Expr> parseAdditive();
+    /// @brief Parse multiplicative expressions.
     std::unique_ptr<Expr> parseMultiplicative();
+    /// @brief Parse unary expressions.
     std::unique_ptr<Expr> parseUnary();
+    /// @brief Parse postfix expressions such as calls and member access.
     std::unique_ptr<Expr> parsePostfix();
+    /// @brief Parse primary expressions such as literals and parenthesized expressions.
     std::unique_ptr<Expr> parsePrimary();
+    /// @brief Parse typed array initializers.
     std::unique_ptr<Expr> parseArrayLiteral();
+    /// @brief Parse brace array literals.
     std::unique_ptr<Expr> parseBraceArrayLiteral();
+    /// @brief Parse an argument list terminated by `closing`.
     std::vector<std::unique_ptr<Expr>> parseArgumentList(TokenKind closing);
 
   private:
+    /// Shared parser state and token cursor.
     Parser& parser_;
 };
 
+/// @brief Returns whether a token participates in comparison-chain parsing.
 inline bool isComparisonToken(TokenKind kind) {
     return kind == TokenKind::EqualEqual || kind == TokenKind::BangEqual || kind == TokenKind::Less ||
            kind == TokenKind::LessEqual || kind == TokenKind::Greater || kind == TokenKind::GreaterEqual ||
            kind == TokenKind::KwIn;
 }
 
+/// @brief Returns whether an identifier names an enum flag operation keyword.
 inline bool isEnumOperationIdentifier(const Token& token) {
     return token.kind == TokenKind::Identifier &&
            (token.lexeme == "set" || token.lexeme == "unset" || token.lexeme == "toggle" || token.lexeme == "is" || token.lexeme == "isnot");
 }
 
+/// @brief Map textual enum operation names onto AST binary operators.
 inline BinaryOp enumOperationFromLexeme(const std::string& lexeme) {
     if (lexeme == "set") {
         return BinaryOp::Set;
@@ -118,6 +176,7 @@ inline BinaryOp enumOperationFromLexeme(const std::string& lexeme) {
     return BinaryOp::IsNot;
 }
 
+/// @brief Map comparison tokens onto AST binary operators.
 inline BinaryOp tokenToComparisonOp(TokenKind kind) {
     switch (kind) {
         case TokenKind::EqualEqual:
@@ -139,6 +198,7 @@ inline BinaryOp tokenToComparisonOp(TokenKind kind) {
     }
 }
 
+/// @brief Map compound assignment tokens onto their desugared binary operator.
 inline std::optional<BinaryOp> tokenToCompoundBinaryOp(TokenKind kind) {
     switch (kind) {
         case TokenKind::PlusEqual:
@@ -166,6 +226,7 @@ inline std::optional<BinaryOp> tokenToCompoundBinaryOp(TokenKind kind) {
     }
 }
 
+/// @brief Returns whether a token kind is a builtin scalar type name.
 inline bool isBuiltinTypeName(TokenKind kind) {
     return kind == TokenKind::KwInt || kind == TokenKind::KwVoid || kind == TokenKind::KwStr || kind == TokenKind::KwError ||
            kind == TokenKind::KwBool || kind == TokenKind::KwI2 || kind == TokenKind::KwI8 || kind == TokenKind::KwI16 ||
@@ -175,6 +236,7 @@ inline bool isBuiltinTypeName(TokenKind kind) {
            kind == TokenKind::KwF32 || kind == TokenKind::KwF64 || kind == TokenKind::KwChar;
 }
 
+/// @brief Clone an expression subtree for parser desugaring.
 inline std::unique_ptr<Expr> cloneExpr(const Expr& expr) {
     switch (expr.kind) {
         case ExprKind::IntegerLiteral:

@@ -1,3 +1,6 @@
+/// @file
+/// @brief Statement parsing entry points and statement-specific recursive-descent routines.
+
 #include "axc/Parse/Parser.h"
 
 #include "../Internal/ParserInternal.h"

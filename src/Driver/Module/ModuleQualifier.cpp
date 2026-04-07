@@ -1,3 +1,6 @@
+/// @file
+/// @brief Rewrites AST references to fully qualified module-visible names.
+
 #include "ModuleQualifier.h"
 
 #include <vector>

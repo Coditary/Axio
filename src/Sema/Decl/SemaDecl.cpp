@@ -1,3 +1,6 @@
+/// @file
+/// @brief Declaration and statement semantic validation, including scope and switch rules.
+
 #include "../Internal/SemaInternal.h"
 
 #include <algorithm>

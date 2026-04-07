@@ -1,3 +1,6 @@
+/// @file
+/// @brief Expression semantic analysis, constant evaluation, and type inference support.
+
 #include "../Internal/SemaInternal.h"
 
 #include <cstdint>

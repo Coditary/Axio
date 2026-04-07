@@ -1,3 +1,6 @@
+/// @file
+/// @brief LLVM lowering for expressions, constants, calls, ownership operations, and conversions.
+
 #include "../Internal/LLVMEmitterInternal.h"
 
 #include "axc/Support/Diagnostic.h"

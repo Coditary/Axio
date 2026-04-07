@@ -1,3 +1,6 @@
+/// @file
+/// @brief CLI-oriented orchestration of source loading, front-end validation, and LLVM emission.
+
 #include "CompilerWorkflow.h"
 
 #include <iostream>

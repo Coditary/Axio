@@ -7,6 +7,7 @@
 
 namespace axc {
 
+/// @brief Resolve an expression to a dotted qualified-name string when possible.
 inline std::optional<std::string> qualifiedNameFromExpr(const Expr& expr) {
     switch (expr.kind) {
         case ExprKind::DeclRef:
@@ -27,6 +28,7 @@ inline std::optional<std::string> qualifiedNameFromExpr(const Expr& expr) {
     }
 }
 
+/// @brief Return the last segment of a dotted qualified name.
 inline std::string lastQualifiedSegment(const std::string& name) {
     const std::size_t pos = name.rfind('.');
     return pos == std::string::npos ? name : name.substr(pos + 1);

@@ -9,6 +9,7 @@
 
 namespace axc::detail {
 
+/// @brief One named declaration exported or declared by a module.
 struct ModuleSymbol {
     std::string publicName {};
     std::string qualifiedName {};
@@ -17,6 +18,7 @@ struct ModuleSymbol {
     std::string signature {};
 };
 
+/// @brief Public interface summary for one loaded module.
 struct ModuleInterface {
     std::string moduleName {};
     std::unordered_map<std::string, ModuleSymbol> declaredSymbols {};
@@ -24,6 +26,7 @@ struct ModuleInterface {
     std::string apiFingerprint {};
 };
 
+/// @brief Parsed module plus its filesystem origin and computed interface.
 struct LoadedModule {
     std::filesystem::path filePath {};
     std::string moduleName {};
@@ -31,6 +34,7 @@ struct LoadedModule {
     ModuleInterface interface {};
 };
 
+/// @brief Name-resolution view produced from a file's imports.
 struct ModuleImportBindings {
     std::unordered_map<std::string, ModuleSymbol> importedSymbols {};
     std::unordered_set<std::string> ambiguousNames {};
@@ -38,6 +42,7 @@ struct ModuleImportBindings {
     std::unordered_map<std::string, std::string> visibleModules {};
 };
 
+/// @brief Join a module path and local declaration name into one qualified name.
 inline std::string qualifyModuleSymbol(const std::string& moduleName, const std::string& localName) {
     return moduleName.empty() ? localName : moduleName + "." + localName;
 }
