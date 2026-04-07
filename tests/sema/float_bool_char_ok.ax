@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn main() int {
     let a f64 = 2.5
     let b bool = true
@@ -8,3 +10,4 @@ fn main() int {
 }
 
 // CHECK-NOT: error:
+

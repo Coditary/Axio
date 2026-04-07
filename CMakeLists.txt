@@ -19,42 +19,61 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 find_program(RE2C_EXECUTABLE re2c)
 
 set(AXC_CORE_SOURCES
-    src/main.cpp
-    src/Driver/Compiler.cpp
-    src/Driver/ModuleLoader.cpp
-    src/Support/SourceManager.cpp
-    src/Support/Diagnostic.cpp
-    src/AST/ASTPrinter.cpp
-    src/Parse/Parser.cpp
-    src/Parse/ParserSupport.cpp
-    src/Parse/ParserDecl.cpp
-    src/Parse/ParserStmt.cpp
-    src/Parse/ParserExpr.cpp
-    src/Sema/Sema.cpp
-    src/Sema/SemaAnalysis.cpp
-    src/Sema/SemaDecl.cpp
-    src/Sema/SemaExpr.cpp
-    src/Meta/MetaPipeline.cpp
-    src/Codegen/LLVMEmitter.cpp
-    src/Codegen/LLVMEmitterModule.cpp
-    src/Codegen/LLVMEmitterDecl.cpp
-    src/Codegen/LLVMEmitterExpr.cpp
-    src/Codegen/LLVMEmitterStmt.cpp
-    src/Lex/LexerNames.cpp
-    src/Lex/LexerSupport.cpp
-    src/Lex/LexerCore.cpp
-    src/AST/ASTPrinterDecl.cpp
-    src/AST/ASTPrinterStmtExpr.cpp
-    src/Meta/MetaPipelineAnnotations.cpp
-    src/Meta/MetaPipelineEmbed.cpp
-    src/Runtime/AxioRuntime.cpp
+    src/App/Main.cpp
+    src/Driver/Pipeline/Compiler.cpp
+    src/Driver/Pipeline/CompilerWorkflow.cpp
+    src/Driver/Module/ModuleLoader.cpp
+    src/Driver/Module/ModuleFileParser.cpp
+    src/Driver/Module/ModuleImportResolver.cpp
+    src/Driver/Module/ModuleInterface.cpp
+    src/Driver/Module/ModuleQualifier.cpp
+    src/Support/InlineLlvm.cpp
+    src/Support/Source/SourceManager.cpp
+    src/Support/Diagnostics/DiagnosticEngine.cpp
+    src/AST/Print/ASTPrinter.cpp
+    src/AST/Print/ASTPrinterDecl.cpp
+    src/AST/Print/ASTPrinterStmtExpr.cpp
+    src/Parse/Core/Parser.cpp
+    src/Parse/Core/ParserSupport.cpp
+    src/Parse/Decl/ParserDecl.cpp
+    src/Parse/Stmt/ParserStmt.cpp
+    src/Parse/Expr/Core/ParserEntry.cpp
+    src/Parse/Expr/Core/ParserAssignment.cpp
+    src/Parse/Expr/Core/ParserPipe.cpp
+    src/Parse/Expr/Logical/ParserLogical.cpp
+    src/Parse/Expr/Logical/ParserComparison.cpp
+    src/Parse/Expr/Arithmetic/ParserBitwise.cpp
+    src/Parse/Expr/Arithmetic/ParserShift.cpp
+    src/Parse/Expr/Arithmetic/ParserAdditive.cpp
+    src/Parse/Expr/Arithmetic/ParserMultiplicative.cpp
+    src/Parse/Expr/Primary/ParserUnary.cpp
+    src/Parse/Expr/Primary/ParserPostfix.cpp
+    src/Parse/Expr/Primary/ParserPrimary.cpp
+    src/Sema/Core/Sema.cpp
+    src/Sema/Core/SemaAnalysis.cpp
+    src/Sema/Decl/SemaDecl.cpp
+    src/Sema/Expr/SemaExpr.cpp
+    src/Meta/Core/MetaPipeline.cpp
+    src/Meta/Core/MetaWorkflow.cpp
+    src/Meta/Annotations/MetaPipelineAnnotations.cpp
+    src/Meta/Embedding/MetaPipelineEmbed.cpp
+    src/Codegen/Core/LLVMEmitter.cpp
+    src/Codegen/Core/LLVMEmitterModule.cpp
+    src/Codegen/Core/ModuleEmissionWorkflow.cpp
+    src/Codegen/Decl/LLVMEmitterDecl.cpp
+    src/Codegen/Expr/LLVMEmitterExpr.cpp
+    src/Codegen/Stmt/LLVMEmitterStmt.cpp
+    src/Lex/Support/TokenNames.cpp
+    src/Lex/Support/LexerText.cpp
+    src/Lex/Core/LexerCore.cpp
+    src/Runtime/Core/AxioRuntime.cpp
 )
 
-list(REMOVE_ITEM AXC_CORE_SOURCES src/main.cpp)
+list(REMOVE_ITEM AXC_CORE_SOURCES src/App/Main.cpp)
 
 add_library(axc_core ${AXC_CORE_SOURCES})
 
-add_executable(axc src/main.cpp)
+add_executable(axc src/App/Main.cpp)
 
 if(AXC_USE_RE2C AND RE2C_EXECUTABLE)
     set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -63,8 +82,8 @@ if(AXC_USE_RE2C AND RE2C_EXECUTABLE)
     add_custom_command(
         OUTPUT ${GENERATED_LEXER}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED_DIR}
-        COMMAND ${RE2C_EXECUTABLE} -W --no-generation-date -o ${GENERATED_LEXER} ${CMAKE_CURRENT_SOURCE_DIR}/src/Lex/Lexer.re
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/Lex/Lexer.re
+        COMMAND ${RE2C_EXECUTABLE} -W --no-generation-date -o ${GENERATED_LEXER} ${CMAKE_CURRENT_SOURCE_DIR}/src/Lex/Grammar/Lexer.re
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/Lex/Grammar/Lexer.re
         COMMENT "Generating lexer with re2c"
         VERBATIM
     )
@@ -75,7 +94,7 @@ else()
     if(AXC_USE_RE2C AND NOT RE2C_EXECUTABLE)
         message(WARNING "re2c was not found. Falling back to the checked-in lexer implementation.")
     endif()
-    target_sources(axc_core PRIVATE src/Lex/Lexer.cpp)
+    target_sources(axc_core PRIVATE src/Lex/Core/Lexer.cpp)
 endif()
 
 target_include_directories(axc_core PUBLIC include ${LLVM_INCLUDE_DIRS})
@@ -89,6 +108,7 @@ endif()
 llvm_map_components_to_libnames(AXC_LLVM_LIBS
     Core
     Support
+    Linker
     native
     nativecodegen
     target

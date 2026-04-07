@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "1"
 
+package main
+
 class User {
 }
 
@@ -11,3 +13,4 @@ fn main() int {
     }
     return 0
 }
+

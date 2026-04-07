@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn main() int {
     let raw int = 7
     let value weak int = raw
@@ -7,3 +9,4 @@ fn main() int {
 }
 
 // CHECK: error: weak values must originate from ARC or weak references
+

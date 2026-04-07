@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class User {
     fn greet() int {
         return 1
@@ -11,3 +13,4 @@ class User {
 }
 
 // CHECK: error: duplicate class method 'greet'
+

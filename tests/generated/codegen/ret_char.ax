@@ -1,8 +1,11 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 fn main() char {
     return 'A'
 }
 
 // CHECK: ret i8 65
+

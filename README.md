@@ -7,13 +7,38 @@ The repository is structured so that lexer, parser, AST, metaprogramming passes,
 ## What is already implemented
 
 - CMake project with LLVM integration and optional re2c-based lexer generation
-- C-like surface syntax for `struct`, `extern`, functions, local variables, integer arithmetic, string literals, pointer syntax, address-of, dereference, and `return`
+- C-like surface syntax for `struct`, `extern`, functions, local variables, integer arithmetic, string literals, line/block comments, pointer syntax, address-of, dereference, `return`, `defer`, and inline LLVM functions
 - AST-driven parsing with a clean separation between lexing, parsing, meta passes, and code generation
+- explicit module loading with public interfaces, selective imports, and re-exports
+- semantic validation for `const` globals, locals, and parameters
 - Diagnostic engine with source ranges, line and column rendering, and caret markers
 - Simple metaprogramming hooks:
   - annotations such as `@inline`
   - compile-time file embedding through `__embed_text("path")`
 - LLVM backend that emits `.ll`, `.o`, and a linked binary
+
+## Language notes
+
+- Comments:
+  - `//` comments run until the next newline
+  - `/* ... */` comments can span multiple lines
+- Functions without an explicit return type are treated as `void`
+  - `return` is optional
+  - a bare `return` is allowed
+- `defer call()` runs the deferred call when the current scope exits, in LIFO order
+- `while`, `for`, `foreach`, `do { ... } while ...`, and `switch` are supported
+- `switch` cases do not fall through into the next case
+- reaching the end of a case body exits the `switch`; use `break` only when you want to exit early from inside nested control flow in that case
+- `break` exits the nearest loop or `switch`
+- `continue` advances the nearest loop and is rejected inside `switch`
+- for non-flag enums, a `switch` without `default` must cover every enum case
+- `switch` cases can use single values or ranges, for example `case 1..=3 {}` or `case Color.Red..=Color.Green {}`
+- enum-switch exhaustiveness diagnostics list the concrete missing enum members when they can be determined
+- overlapping constant switch cases are rejected during semantic analysis
+- switch patterns must be compile-time constants; dynamic bounds like `case 1..limit {}` are rejected
+- dense value-only switches still lower through LLVM `switch`; range-pattern switches use explicit comparisons before exact-value dispatch
+- `fn llvm name(...) ... { ... }` lets you define a function body directly in LLVM IR
+  - the inline LLVM body is parsed and verified before Axio accepts it
 
 ## Build
 
@@ -61,17 +86,63 @@ See `examples/hello.ax` and `examples/assets/banner.txt`.
 - `include/axc/Support`, `src/Support`
   - source management and human-readable diagnostics
 - `include/axc/Lex`, `src/Lex`
-  - token model and lexer, with `src/Lex/Lexer.re` as the re2c grammar seed
+  - token model and lexer, with `src/Lex/Grammar/Lexer.re` as the re2c grammar seed
 - `include/axc/AST`
   - syntax tree definitions
 - `include/axc/Parse`, `src/Parse`
-  - recursive descent parser for the current language subset
+  - recursive descent parser split by declarations, statements, and expression families
+- `src/Driver/Module`
+  - single-file parsing, module interfaces, import binding rules, qualification, and recursive loading
+- `include/axc/Sema`, `src/Sema`
+  - semantic validation for symbols, const rules, ownership checks, and class/member usage
 - `include/axc/Meta`, `src/Meta`
   - compile-time annotation and embedding validation pipeline
 - `include/axc/Codegen`, `src/Codegen`
-  - LLVM IR lowering, object emission, and final binary linking
+  - LLVM IR lowering split by declarations, expressions, statements, and module workflow
 - `include/axc/Driver`, `src/Driver`
   - compiler orchestration and CLI-facing pipeline control
+
+## Module model
+
+- each file declares its package path explicitly at the top:
+
+```axio
+package math.ops
+```
+
+- `pub fn`, `pub struct`, `pub class`, `pub enum`, `pub const`, `pub let`
+  - exported as part of the package interface
+- declarations without `pub`
+  - private to their defining package file set
+- bare import of a package injects its exported names into the current local scope
+- import blocks are supported
+- aliases are supported
+- `pub import foo.bar{Name}` remains available as an explicit re-export form
+
+Examples:
+
+```axio
+package app.main
+
+import (
+  math.ops
+  pt geom.point
+)
+
+fn main() int {
+    let p pt.Point = pt.Point(1, 2)
+    return add(p.x, p.y)
+}
+```
+
+The package interface fingerprint is derived from the exported API surface, so private implementation changes can stay below that boundary in future incremental builds.
+
+## Const model
+
+- `const` globals are immutable
+- `const` local bindings are immutable inside their scope
+- `const` function parameters cannot be reassigned
+- these checks run in semantic analysis before code generation
 
 ## Metaprogramming model roadmap
 

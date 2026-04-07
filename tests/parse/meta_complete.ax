@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 #define APP Demo
 #ifndef PROD
 #define BUILD_MODE dev
@@ -22,3 +24,4 @@ SELECT * FROM users
 // CHECK: CompileCall readfile
 // CHECK: CompileCall generate_open_api
 // CHECK: Dialect SQL
+

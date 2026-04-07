@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn add(a int, b int) int {
     return a + b
 }
@@ -11,3 +13,4 @@ fn main() int {
 // CHECK: Function add
 // CHECK: Param a:int
 // CHECK: Param b:int
+

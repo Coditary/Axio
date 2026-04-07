@@ -1,8 +1,11 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn main() int {
     let missing_1
     return 0
 }
 
 // CHECK: error: let declaration needs either a type or an initializer
+

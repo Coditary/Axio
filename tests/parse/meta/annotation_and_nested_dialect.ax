@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 #define BUILD_MODE dev
 @ThreadSafe
 fn main() int {
@@ -15,3 +17,4 @@ SELECT id FROM users WHERE active = 1
 // CHECK: Function main
 // CHECK: Dialect SQL
 // CHECK: CompileCall readfile
+

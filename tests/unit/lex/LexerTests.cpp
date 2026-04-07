@@ -99,3 +99,63 @@ AXC_TEST(Lexer_TokenizesEmptyCompileArgumentCallsAndFlagMembers) {
     AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::Dot));
     return true;
 }
+
+AXC_TEST(Lexer_TokenizesDeferAndInlineLlvmBodies) {
+    auto dir = axc::unit::makeTempDir("lexer_defer_llvm");
+    const auto path = dir.path / "defer_llvm.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "fn llvm add(a int, b int) int {\n"
+                                    "entry:\n"
+                                    "  %sum = add i32 %a, %b\n"
+                                    "  ret i32 %sum\n"
+                                    "}\n"
+                                    "fn main() {\n"
+                                    "    defer cleanup()\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::lexSource(file, path));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::KwDefer));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::KwLlvm));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::LlvmBlock));
+    return true;
+}
+
+AXC_TEST(Lexer_TokenizesScientificNotationUnsignedAndMutationOperators) {
+    auto dir = axc::unit::makeTempDir("lexer_scientific_mutation");
+    const auto path = dir.path / "scientific.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "fn main() int {\n"
+                                    "    let lower f64 = 35e3\n"
+                                    "    let upper f64 = 35E-2\n"
+                                    "    let count unsigned i32 = 1\n"
+                                    "    count += int(lower)\n"
+                                    "    count <<= 2\n"
+                                    "    count++\n"
+                                    "    --count\n"
+                                    "    return 0\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::lexSource(file, path));
+
+    bool foundLower = false;
+    bool foundUpper = false;
+    for (const auto& token : file.tokens) {
+        if (token.kind == axc::TokenKind::FloatLiteral && token.lexeme == "35e3") {
+            foundLower = true;
+        }
+        if (token.kind == axc::TokenKind::FloatLiteral && token.lexeme == "35E-2") {
+            foundUpper = true;
+        }
+    }
+
+    AXC_EXPECT(foundLower);
+    AXC_EXPECT(foundUpper);
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::KwUnsigned));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::PlusEqual));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::ShiftLeftEqual));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::PlusPlus));
+    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::MinusMinus));
+    return true;
+}

@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn pair() (int, int) {
     return 1, 2
 }
@@ -11,3 +13,4 @@ fn main() int {
 
 // CHECK: Let a:int, b:int
 // CHECK: Call
+

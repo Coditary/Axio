@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 enum ActorState as Flags {
     IsAlive,
     Team as Flag {
@@ -20,3 +22,4 @@ fn main() int {
 // CHECK: Element Team
 // CHECK: Element IsVisible
 // CHECK: Let state:ActorState
+

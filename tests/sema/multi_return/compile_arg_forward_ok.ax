@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn pair{bias int}(x int) (int, int) {
     return x + bias, x + bias + 1
 }
@@ -11,3 +13,4 @@ fn main() int {
 
 // CHECK-NOT: error:
 // CHECK-NOT: warning:
+

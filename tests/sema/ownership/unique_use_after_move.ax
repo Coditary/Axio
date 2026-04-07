@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Obj {
 }
 
@@ -15,3 +17,4 @@ fn main() int {
 }
 
 // CHECK: error: unique values cannot be used after they have been moved
+

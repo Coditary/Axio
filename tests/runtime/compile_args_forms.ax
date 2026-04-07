@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "15"
 
+package main
+
 fn add{lhs int}(rhs int) int {
     return lhs + rhs
 }
@@ -12,3 +14,4 @@ fn main() int {
     let d int = add{}(1, c)
     return d
 }
+

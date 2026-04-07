@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 fn pair(x int) (int, int) {
     return x, x + 1
 }
@@ -13,3 +15,4 @@ fn main() int {
 // CHECK: define { i32, i32 } @pair
 // CHECK: insertvalue { i32, i32 }
 // CHECK: extractvalue { i32, i32 }
+

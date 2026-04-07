@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 enum ActorState as Flags {
     IsAlive,
     IsVisible,
@@ -11,3 +13,4 @@ fn main() int {
 }
 
 // CHECK-NOT: error:
+

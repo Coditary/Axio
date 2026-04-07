@@ -1,0 +1,12 @@
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
+
+package main
+
+fn llvm add(a int, b int) int {
+entry:
+  %sum = add i32 %a, %b
+  ret i32 %sum
+}
+
+// CHECK-NOT: error:
+

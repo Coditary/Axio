@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 extern fn puts(text str) int;
 
 fn main() int {
@@ -10,3 +12,4 @@ fn main() int {
 
 // CHECK: declare i32 @puts
 // CHECK: call i32 @puts
+

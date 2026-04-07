@@ -36,3 +36,33 @@ AXC_TEST(Sema_RejectsWeakBindingsFromValueInitializers) {
                                                   axc::DiagnosticSeverity::Error));
     return true;
 }
+
+AXC_TEST(Sema_RejectsAssignmentsToConstBindingsAndParams) {
+    auto dir = axc::unit::makeTempDir("sema_const_assign");
+    const auto path = dir.path / "const_assign.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "const globalCount int = 1\n"
+                                    "fn bump(const value int) int {\n"
+                                    "    value = value + 1\n"
+                                    "    return value\n"
+                                    "}\n"
+                                    "fn main() int {\n"
+                                    "    const local int = 7\n"
+                                    "    local = 9\n"
+                                    "    globalCount = 2\n"
+                                    "    return bump(local)\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::analyzeSource(file, path));
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics,
+                                                  "cannot assign to const storage 'value'",
+                                                  axc::DiagnosticSeverity::Error));
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics,
+                                                  "cannot assign to const storage 'local'",
+                                                  axc::DiagnosticSeverity::Error));
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics,
+                                                  "cannot assign to const storage 'globalCount'",
+                                                  axc::DiagnosticSeverity::Error));
+    return true;
+}

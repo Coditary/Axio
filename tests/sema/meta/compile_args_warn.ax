@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn log{level int}(value int) int {
     return value
 }
@@ -14,3 +16,4 @@ fn main() int {
 
 // CHECK-NOT: error:
 // CHECK-NOT: warning:
+

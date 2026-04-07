@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn project{scale int, bias int}(x int, y int) (int, int) {
     return x + scale, y + bias
 }
@@ -16,3 +18,4 @@ fn main() int {
 // CHECK: Param y:int
 // CHECK: Returns int int
 // CHECK: Let left:int, right:int
+

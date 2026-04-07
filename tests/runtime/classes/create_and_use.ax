@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "13"
 
+package main
+
 class User {
     age int
 
@@ -14,3 +16,4 @@ fn main() int {
     user.age = 12
     return user.bump()
 }
+

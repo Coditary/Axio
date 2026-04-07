@@ -11,6 +11,11 @@
 
 namespace axc {
 
+enum class Visibility {
+    Private,
+    Public,
+};
+
 struct Annotation {
     std::string name {};
     std::vector<std::string> arguments {};

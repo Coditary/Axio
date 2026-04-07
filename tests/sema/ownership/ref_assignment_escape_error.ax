@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Obj {
 }
 
@@ -10,3 +12,4 @@ fn main(src ref Obj) int {
 }
 
 // CHECK: error: ref values cannot be assigned into owning or value storage
+

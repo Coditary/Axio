@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Box {
     value int
 }
@@ -11,3 +13,4 @@ fn main() int {
 }
 
 // CHECK: warning: null-safe member access used on a value that is not known to be nullable
+

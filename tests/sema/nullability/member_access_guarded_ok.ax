@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Box {
     value int
 }
@@ -13,3 +15,4 @@ fn main() int {
 }
 
 // CHECK-NOT: warning: member access may dereference a nullable value
+

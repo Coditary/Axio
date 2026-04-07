@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "0"
 
+package main
+
 class Obj {
     value int
 }
@@ -14,3 +16,4 @@ fn main() int {
     consume(unique)
     return 0
 }
+

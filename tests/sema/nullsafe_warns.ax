@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Box {
     fn ping() void {
         return
@@ -16,3 +18,4 @@ fn main() int {
 
 // CHECK-NOT: warning: null-check postfix '?' is parsed but only partially lowered
 // CHECK-NOT: warning: null-safe member access is parsed but not yet lowered in codegen
+

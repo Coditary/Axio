@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 enum Color() {
     Red,
     Green,
@@ -33,3 +35,4 @@ enum ActorState as Flags {
 // CHECK: Enum ActorState as Flags
 // CHECK: Element Team as Flag
 // CHECK: Element Mode
+

@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 #define BUILD_MODE dev
 
 fn main() int {
@@ -13,3 +15,4 @@ SELECT * FROM users
 // CHECK: Preprocessor #define BUILD_MODE dev
 // CHECK: CompileCall readfile
 // CHECK: Dialect SQL
+

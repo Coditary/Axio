@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn grüße(nachricht str) str {
     let länge int = 1
     return nachricht
@@ -8,3 +10,4 @@ fn grüße(nachricht str) str {
 // CHECK: Function grüße
 // CHECK: Param nachricht:str
 // CHECK: Let länge:int
+

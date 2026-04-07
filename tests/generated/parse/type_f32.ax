@@ -1,7 +1,10 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main(value f32) int {
     return 0
 }
 
 // CHECK: Param value:f32
+

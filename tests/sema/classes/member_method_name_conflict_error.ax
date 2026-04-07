@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class User {
     greet int
 
@@ -14,3 +16,4 @@ fn main() int {
 }
 
 // CHECK: error: class member and method share the name 'greet'
+

@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 class User {
     age int
 
@@ -21,3 +23,4 @@ fn main() int {
 // CHECK: Binary
 // CHECK: Member age
 // CHECK: Call
+

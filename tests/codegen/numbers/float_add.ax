@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 fn main() f64 {
     let a f64 = 1.5
     let b f64 = 2.5
@@ -8,3 +10,4 @@ fn main() f64 {
 }
 
 // CHECK: fadd
+

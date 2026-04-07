@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "7"
 
+package main
+
 class Obj {
     value int
 }
@@ -14,3 +16,4 @@ fn main() int {
     let alias ref Obj = borrow(&value)
     return alias.value
 }
+

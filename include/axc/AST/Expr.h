@@ -16,6 +16,7 @@ enum class ExprKind {
     DeclRef,
     Unary,
     Binary,
+    Cast,
     Range,
     Call,
     Member,
@@ -30,6 +31,10 @@ enum class UnaryOp {
     Dereference,
     LogicalNot,
     BitwiseNot,
+    PreIncrement,
+    PreDecrement,
+    PostIncrement,
+    PostDecrement,
     IsNonNull,
 };
 
@@ -130,6 +135,14 @@ struct BinaryExpr final : Expr {
     BinaryOp op;
     std::unique_ptr<Expr> lhs;
     std::unique_ptr<Expr> rhs;
+};
+
+struct CastExpr final : Expr {
+    CastExpr(std::unique_ptr<Expr> value, Type targetType, SourceRange range)
+        : Expr(ExprKind::Cast, range), value(std::move(value)), targetType(std::move(targetType)) {}
+
+    std::unique_ptr<Expr> value;
+    Type targetType {};
 };
 
 struct RangeExpr final : Expr {

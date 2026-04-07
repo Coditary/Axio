@@ -1,6 +1,7 @@
 #include "support/TestSupport.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <sstream>
@@ -180,6 +181,28 @@ bool compileToLlvmIr(const std::filesystem::path& input, const std::filesystem::
     options.emitObject = false;
     options.emitBinary = false;
     return compiler.compile(options);
+}
+
+bool compileToBinary(const std::filesystem::path& input, const std::filesystem::path& outputBase) {
+    Compiler compiler;
+    CompileOptions options;
+    options.inputFile = input;
+    options.outputFile = outputBase;
+    options.emitLlvmIr = false;
+    options.emitObject = true;
+    options.emitBinary = true;
+    return compiler.compile(options);
+}
+
+std::optional<int> runBinary(const std::filesystem::path& binaryPath) {
+    const int status = std::system(binaryPath.string().c_str());
+    if (status < 0) {
+        return std::nullopt;
+    }
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    return std::nullopt;
 }
 
 }  // namespace axc::unit

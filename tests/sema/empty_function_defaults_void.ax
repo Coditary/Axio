@@ -1,7 +1,10 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn noop() {
     return
 }
 
-// CHECK: warning: function without explicit return type defaults to void semantics in this prototype
+// CHECK-NOT: error:
+

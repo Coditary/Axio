@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "7"
 
+package main
+
 class Obj {
     value int
 }
@@ -14,3 +16,4 @@ fn main() int {
     let result weak Obj = id(value)
     return result.value
 }
+

@@ -1,0 +1,10 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+package main
+
+fn main() {
+    defer 42
+}
+
+// CHECK: error: defer expects a function or method call
+

@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn pair() (int, int) {
     return 1, 2
 }
@@ -9,3 +11,4 @@ fn main() int {
 }
 
 // CHECK: error: binary operators require single-value operands
+

@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 fn inc{step int}(x int) int {
     return x + step
 }
@@ -24,3 +26,4 @@ fn main() int {
 // CHECK: call i32 @inc(i32 3, i32
 // CHECK: call i32 @inc(i32 3, i32
 // CHECK: call i32 @inc(i32 3, i32
+

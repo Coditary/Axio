@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 struct Stats {
     speed int = 10
 }
@@ -18,3 +20,4 @@ class Ship {
 // CHECK: Member name:str
 // CHECK: Member print:str
 // CHECK: Function greet
+

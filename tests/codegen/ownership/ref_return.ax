@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 class Obj {
     value int
 }
@@ -16,3 +18,4 @@ fn main() int {
 }
 
 // CHECK: define ptr @borrow(ptr %x)
+

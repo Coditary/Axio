@@ -149,3 +149,111 @@ AXC_TEST(Parser_ParsesAddressOfAndDereference) {
     AXC_EXPECT_EQ(static_cast<const axc::UnaryExpr&>(*ret.values[0]).op, axc::UnaryOp::Dereference);
     return true;
 }
+
+AXC_TEST(Parser_ParsesScientificUnsignedConversionsAndMutationOperators) {
+    auto dir = axc::unit::makeTempDir("parser_scientific_unsigned_mutation");
+    const auto path = dir.path / "scientific_mutation.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "fn main() int {\n"
+                                    "    let count unsigned i32 = 1\n"
+                                    "    let amount f64 = 35e3\n"
+                                    "    let narrowed int = ((amount + 5) / 10) as int\n"
+                                    "    count += narrowed\n"
+                                    "    count <<= 1\n"
+                                    "    count++\n"
+                                    "    --count\n"
+                                    "    return count\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::parseSource(file, path));
+    const auto* mainFn = axc::unit::findFunction(file.unit, "main");
+    AXC_EXPECT(mainFn != nullptr && mainFn->body != nullptr);
+    AXC_EXPECT_EQ(mainFn->body->statements.size(), 8U);
+
+    const auto& countLet = static_cast<const axc::LetStmt&>(*mainFn->body->statements[0]);
+    AXC_EXPECT_EQ(countLet.bindings[0].explicitType.name, std::string("u32"));
+
+    const auto& amountLet = static_cast<const axc::LetStmt&>(*mainFn->body->statements[1]);
+    AXC_EXPECT_EQ(amountLet.initializer->kind, axc::ExprKind::FloatLiteral);
+
+    const auto& narrowedLet = static_cast<const axc::LetStmt&>(*mainFn->body->statements[2]);
+    AXC_EXPECT_EQ(narrowedLet.initializer->kind, axc::ExprKind::Cast);
+
+    const auto& addAssign = static_cast<const axc::ExprStmt&>(*mainFn->body->statements[3]);
+    AXC_EXPECT_EQ(addAssign.expression->kind, axc::ExprKind::Binary);
+    AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*addAssign.expression).op, axc::BinaryOp::Assign);
+    AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*static_cast<const axc::BinaryExpr&>(*addAssign.expression).rhs).op, axc::BinaryOp::Add);
+
+    const auto& shiftAssign = static_cast<const axc::ExprStmt&>(*mainFn->body->statements[4]);
+    AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*shiftAssign.expression).op, axc::BinaryOp::Assign);
+    AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*static_cast<const axc::BinaryExpr&>(*shiftAssign.expression).rhs).op, axc::BinaryOp::ShiftLeft);
+
+    const auto& postInc = static_cast<const axc::ExprStmt&>(*mainFn->body->statements[5]);
+    AXC_EXPECT_EQ(postInc.expression->kind, axc::ExprKind::Unary);
+    AXC_EXPECT_EQ(static_cast<const axc::UnaryExpr&>(*postInc.expression).op, axc::UnaryOp::PostIncrement);
+
+    const auto& preDec = static_cast<const axc::ExprStmt&>(*mainFn->body->statements[6]);
+    AXC_EXPECT_EQ(preDec.expression->kind, axc::ExprKind::Unary);
+    AXC_EXPECT_EQ(static_cast<const axc::UnaryExpr&>(*preDec.expression).op, axc::UnaryOp::PreDecrement);
+    return true;
+}
+
+AXC_TEST(Parser_ParsesParenthesizedArithmeticAndLogicalPrecedence) {
+    auto dir = axc::unit::makeTempDir("parser_parenthesized_precedence");
+    const auto path = dir.path / "precedence.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "fn main() int {\n"
+                                    "    let math int = 2 * (3 + 4)\n"
+                                    "    if (1 || 0) && (3 < 4) {\n"
+                                    "        return math\n"
+                                    "    }\n"
+                                    "    return 0\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::parseSource(file, path));
+    const auto* mainFn = axc::unit::findFunction(file.unit, "main");
+    AXC_EXPECT(mainFn != nullptr && mainFn->body != nullptr);
+
+    const auto& mathLet = static_cast<const axc::LetStmt&>(*mainFn->body->statements[0]);
+    const auto& mathExpr = static_cast<const axc::BinaryExpr&>(*mathLet.initializer);
+    AXC_EXPECT_EQ(mathExpr.op, axc::BinaryOp::Mul);
+    AXC_EXPECT_EQ(mathExpr.rhs->kind, axc::ExprKind::Binary);
+    AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*mathExpr.rhs).op, axc::BinaryOp::Add);
+
+    const auto& ifStmt = static_cast<const axc::IfStmt&>(*mainFn->body->statements[1]);
+    const auto& logical = static_cast<const axc::BinaryExpr&>(*ifStmt.condition);
+    AXC_EXPECT_EQ(logical.op, axc::BinaryOp::LogicalAnd);
+    AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*logical.lhs).op, axc::BinaryOp::LogicalOr);
+    return true;
+}
+
+AXC_TEST(Parser_ParsesBraceArrayLiteralAndLenCall) {
+    auto dir = axc::unit::makeTempDir("parser_array_len");
+    const auto path = dir.path / "array_len.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "fn main() int {\n"
+                                    "    let values int[] = {5, 9, 7, 167}\n"
+                                    "    return len(values)\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::parseSource(file, path));
+    const auto* mainFn = axc::unit::findFunction(file.unit, "main");
+    AXC_EXPECT(mainFn != nullptr && mainFn->body != nullptr);
+
+    const auto& letStmt = static_cast<const axc::LetStmt&>(*mainFn->body->statements[0]);
+    AXC_EXPECT_EQ(letStmt.bindings[0].explicitType.name, std::string("int"));
+    AXC_EXPECT_EQ(letStmt.bindings[0].explicitType.arrayExtents.size(), 1U);
+    AXC_EXPECT_EQ(letStmt.initializer->kind, axc::ExprKind::Initializer);
+    AXC_EXPECT_EQ(static_cast<const axc::InitializerExpr&>(*letStmt.initializer).initKind, axc::InitKind::ArrayLiteral);
+
+    const auto& ret = static_cast<const axc::ReturnStmt&>(*mainFn->body->statements[1]);
+    AXC_EXPECT_EQ(ret.values[0]->kind, axc::ExprKind::Call);
+    const auto& call = static_cast<const axc::CallExpr&>(*ret.values[0]);
+    AXC_EXPECT_EQ(call.runtimeArguments.size(), 1U);
+    AXC_EXPECT_EQ(call.callee->kind, axc::ExprKind::DeclRef);
+    AXC_EXPECT_EQ(static_cast<const axc::DeclRefExpr&>(*call.callee).name, std::string("len"));
+    return true;
+}

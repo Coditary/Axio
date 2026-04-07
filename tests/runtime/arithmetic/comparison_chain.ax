@@ -1,8 +1,11 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "1"
 
+package main
+
 fn main() int {
     let a int = 3
     let b int = 5
     return a < b >= 1
 }
+

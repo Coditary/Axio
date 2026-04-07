@@ -1,8 +1,11 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn main() int {
     let x str = $mystery("file")
     return 0
 }
 
 // CHECK: warning: unknown compile function '$mystery' ignored
+

@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 class Obj {
     value int
 }
@@ -10,3 +12,4 @@ fn id(x weak Obj) weak Obj {
 }
 
 // CHECK: define ptr @id(ptr %x)
+

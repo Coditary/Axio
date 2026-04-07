@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "3"
 
+package main
+
 enum ActorState as Flags {
     IsAlive,
     IsVisible,
@@ -10,3 +12,4 @@ fn main() int {
     let state ActorState = ActorState{IsAlive, IsVisible}
     return state
 }
+

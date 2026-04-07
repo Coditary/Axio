@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 enum ActorState as Flags {
     IsAlive,
     Team as Flag {
@@ -18,3 +20,4 @@ fn main() int {
 
 // CHECK: define i32 @main()
 // CHECK: ret i32
+

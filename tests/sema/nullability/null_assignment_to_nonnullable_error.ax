@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Box {
 }
 
@@ -9,3 +11,4 @@ fn main() int {
 }
 
 // CHECK-NOT: error:
+

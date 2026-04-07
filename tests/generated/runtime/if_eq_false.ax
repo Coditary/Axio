@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "9"
 
+package main
+
 fn main() int {
     if 2 == 3 {
         return 7
@@ -8,3 +10,4 @@ fn main() int {
         return 9
     }
 }
+

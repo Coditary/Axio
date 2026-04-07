@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main(
     a_i2 i2,
     a_i8 i8,
@@ -47,3 +49,4 @@ fn main(
 // CHECK: Param a_f64:f64
 // CHECK: Param a_char:char
 // CHECK: Param a_str:str
+

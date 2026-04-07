@@ -1,0 +1,18 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+package main
+
+fn llvm add(a int, b int) int {
+entry:
+  %sum = add i32 %a, %b
+  ret i32 %sum
+}
+
+fn main() int {
+    return add(20, 22)
+}
+
+// CHECK: define i32 @add(i32 %a, i32 %b)
+// CHECK: %sum = add i32 %a, %b
+

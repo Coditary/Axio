@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 class User {
     age int
 }
@@ -12,3 +14,4 @@ fn main() int {
 
 // CHECK: getelementptr inbounds{{( nuw)?}} %User
 // CHECK: load i32
+

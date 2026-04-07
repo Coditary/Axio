@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "0"
 
+package main
+
 class Box {
     fn get() int {
         return 7
@@ -11,3 +13,4 @@ fn main() int {
     let box Box = null
     return box?.get()
 }
+

@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 fn main() int {
     let a int = 7 & 3
     let b int = a | 8
@@ -14,3 +16,4 @@ fn main() int {
 // CHECK: or
 // CHECK: icmp sge
 // CHECK: xor
+

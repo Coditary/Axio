@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main() int {
     let a f64 = 1.5
     let b bool = true
@@ -14,3 +16,4 @@ fn main() int {
 // CHECK: Bool false
 // CHECK: Char
 // CHECK: Init []
+

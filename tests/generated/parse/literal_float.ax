@@ -1,8 +1,11 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main() int {
     let value f64 = 3.25
     return 0
 }
 
 // CHECK: Float 3.25
+

@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "14"
 
+package main
+
 fn inc{step int}(x int) int {
     return x + step
 }
@@ -17,3 +19,4 @@ fn main() int {
     let e int = inc{}(3, d)
     return e
 }
+

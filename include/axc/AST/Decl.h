@@ -6,6 +6,7 @@ namespace axc {
 
 enum class DeclKind {
     Import,
+    GlobalVar,
     Struct,
     Enum,
     Class,
@@ -14,13 +15,16 @@ enum class DeclKind {
 
 struct Decl {
     Decl(DeclKind kind, std::string name, SourceRange range)
-        : kind(kind), name(std::move(name)), range(range) {}
+        : kind(kind), name(name), localName(std::move(name)), range(range) {}
     virtual ~Decl() = default;
 
     DeclKind kind;
     std::string name {};
+    std::string localName {};
     std::vector<Annotation> annotations {};
     SourceRange range {};
+    Visibility visibility = Visibility::Private;
+    std::string moduleName {};
 };
 
 struct StructField {
@@ -36,6 +40,17 @@ struct ImportDecl final : Decl {
         : Decl(DeclKind::Import, std::move(modulePath), range), moduleSegments(std::move(moduleSegments)) {}
 
     std::vector<std::string> moduleSegments {};
+    std::string alias {};
+    std::vector<std::string> importedNames {};
+};
+
+struct GlobalVarDecl final : Decl {
+    GlobalVarDecl(std::string name, SourceRange range)
+        : Decl(DeclKind::GlobalVar, std::move(name), range) {}
+
+    Type type {};
+    std::unique_ptr<Expr> initializer {};
+    bool mutableStorage = true;
 };
 
 struct StructDecl final : Decl {
@@ -76,6 +91,7 @@ struct ClassMember {
     Type type {};
     std::unique_ptr<Expr> dynamicValue {};
     SourceRange range {};
+    Visibility visibility = Visibility::Private;
 };
 
 struct ClassDecl final : Decl {
@@ -92,6 +108,7 @@ struct Parameter {
     Type type {};
     bool isCompileTime = false;
     SourceRange range {};
+    bool isConst = false;
 };
 
 struct FunctionDecl final : Decl {
@@ -102,11 +119,24 @@ struct FunctionDecl final : Decl {
     std::vector<Parameter> runtimeParameters {};
     std::vector<Type> returnTypes {};
     std::unique_ptr<CompoundStmt> body {};
+    std::string llvmBody {};
+    SourceRange llvmBodyRange {};
     bool isExtern = false;
+    bool isLlvm = false;
     std::string receiverType {};
+
+    [[nodiscard]] bool returnsVoid() const {
+        return returnTypes.empty() || (returnTypes.size() == 1 && returnTypes.front().isVoid());
+    }
+
+    [[nodiscard]] std::size_t returnValueCount() const {
+        return returnsVoid() ? 0U : returnTypes.size();
+    }
 };
 
 struct TranslationUnit {
+    std::string packageName {};
+    SourceRange packageRange {};
     std::vector<PreprocessorDirective> preprocessorDirectives {};
     std::vector<std::unique_ptr<Decl>> declarations {};
 };

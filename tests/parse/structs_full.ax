@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 struct Vec3 {
     x int = 0
     y int = 0
@@ -21,3 +23,4 @@ fn main() int {
 // CHECK: Struct Header
 // CHECK: Field kind:int bits 3
 // CHECK: Field flags:int bits 5
+

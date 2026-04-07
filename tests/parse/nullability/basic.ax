@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main() int {
     let ptr Obj = null
     if ptr? {
@@ -11,3 +13,4 @@ fn main() int {
 // CHECK: Let ptr:Obj
 // CHECK: Unary
 // CHECK: Call
+

@@ -1,0 +1,14 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %filecheck %s < %t.ll
+
+package main
+
+extern fn cleanup() int;
+
+fn main() {
+    defer cleanup()
+    return
+}
+
+// CHECK: call i32 @cleanup()
+

@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "2"
 
+package main
+
 enum Color() {
     Red,
     Green,
@@ -10,3 +12,4 @@ enum Color() {
 fn main() int {
     return Color.Blue
 }
+

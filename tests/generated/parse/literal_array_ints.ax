@@ -1,8 +1,11 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main() int {
     let value int = [1, 2, 3]
     return 0
 }
 
 // CHECK: Init []
+

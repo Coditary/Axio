@@ -1,0 +1,11 @@
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
+
+package main
+
+fn llvm broken(a int, b int) int {
+entry:
+  %sum = add i32 %a, %b
+}
+
+// CHECK: error: invalid llvm function body:
+

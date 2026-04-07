@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn log{level int}(value int) int {
     return value
 }
@@ -9,3 +11,4 @@ fn main() int {
 }
 
 // CHECK: error: wrong number of arguments for call to 'log'
+

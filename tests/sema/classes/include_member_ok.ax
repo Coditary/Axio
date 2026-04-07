@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 struct Base {
     age int
 }
@@ -14,3 +16,4 @@ fn main() int {
 }
 
 // CHECK-NOT: error: class 'User' has no member 'age'
+

@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "7"
 
+package main
+
 class Obj {
     value int
 }
@@ -13,3 +15,4 @@ fn main() int {
     let value = Obj(7)
     return read(&value)
 }
+

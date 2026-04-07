@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Obj {
 }
 
@@ -8,3 +10,4 @@ fn clone(x *Obj) (*Obj, *Obj) {
 }
 
 // CHECK: error: unique values cannot be returned more than once from the same statement
+

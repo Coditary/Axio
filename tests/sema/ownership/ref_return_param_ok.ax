@@ -1,8 +1,11 @@
 // RUN: %axc --check-only %s
 
+package main
+
 class Obj {
 }
 
 fn borrow(x ref Obj) ref Obj {
     return x
 }
+

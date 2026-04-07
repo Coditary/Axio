@@ -36,3 +36,25 @@ AXC_TEST(Sema_AllowsMultiReturnForwarding) {
     AXC_EXPECT(!axc::unit::hasDiagnosticContaining(file.diagnostics, "multi-return is parsed but not yet lowered to LLVM", axc::DiagnosticSeverity::Warning));
     return true;
 }
+
+AXC_TEST(Sema_RejectsBreakAndContinueOutsideValidContexts) {
+    auto dir = axc::unit::makeTempDir("sema_break_continue_invalid");
+    const auto path = dir.path / "break_continue_invalid.ax";
+    AXC_EXPECT(axc::unit::writeFile(path,
+                                    "fn main() int {\n"
+                                    "    break\n"
+                                    "    continue\n"
+                                    "    switch 1 {\n"
+                                    "        case 1 {\n"
+                                    "            continue\n"
+                                    "        }\n"
+                                    "    }\n"
+                                    "    return 0\n"
+                                    "}\n"));
+
+    axc::unit::ParsedFile file;
+    AXC_EXPECT(axc::unit::analyzeSource(file, path));
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics, "break can only appear inside loops or switch cases", axc::DiagnosticSeverity::Error));
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics, "continue can only appear inside loops", axc::DiagnosticSeverity::Error));
+    return true;
+}

@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn pair() (int, int) {
     return 1, 2
 }
@@ -10,3 +12,4 @@ fn main() int {
 }
 
 // CHECK: error: multi-return calls cannot initialize a single binding
+

@@ -1,5 +1,7 @@
 // RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class User {
     name str
 }
@@ -11,3 +13,4 @@ fn main() int {
 }
 
 // CHECK: error: class 'User' has no method 'greet'
+

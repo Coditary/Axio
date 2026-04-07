@@ -7,9 +7,17 @@ namespace axc {
 enum class StmtKind {
     Compound,
     Return,
+    Defer,
     Expr,
     Let,
     If,
+    While,
+    For,
+    Foreach,
+    DoWhile,
+    Switch,
+    Break,
+    Continue,
 };
 
 struct Stmt {
@@ -31,6 +39,13 @@ struct ReturnStmt final : Stmt {
         : Stmt(StmtKind::Return, range), values(std::move(values)) {}
 
     std::vector<std::unique_ptr<Expr>> values {};
+};
+
+struct DeferStmt final : Stmt {
+    DeferStmt(std::unique_ptr<Expr> call, SourceRange range)
+        : Stmt(StmtKind::Defer, range), call(std::move(call)) {}
+
+    std::unique_ptr<Expr> call;
 };
 
 struct ExprStmt final : Stmt {
@@ -68,6 +83,90 @@ struct IfStmt final : Stmt {
     std::unique_ptr<Expr> condition;
     std::unique_ptr<CompoundStmt> thenBlock;
     std::unique_ptr<Stmt> elseBranch;
+};
+
+struct WhileStmt final : Stmt {
+    WhileStmt(std::unique_ptr<Expr> condition, std::unique_ptr<CompoundStmt> body, SourceRange range)
+        : Stmt(StmtKind::While, range), condition(std::move(condition)), body(std::move(body)) {}
+
+    std::unique_ptr<Expr> condition;
+    std::unique_ptr<CompoundStmt> body;
+};
+
+struct ForStmt final : Stmt {
+    ForStmt(std::unique_ptr<Stmt> initializer,
+            std::unique_ptr<Expr> condition,
+            std::unique_ptr<Expr> step,
+            std::unique_ptr<CompoundStmt> body,
+            SourceRange range)
+        : Stmt(StmtKind::For, range),
+          initializer(std::move(initializer)),
+          condition(std::move(condition)),
+          step(std::move(step)),
+          body(std::move(body)) {}
+
+    std::unique_ptr<Stmt> initializer;
+    std::unique_ptr<Expr> condition;
+    std::unique_ptr<Expr> step;
+    std::unique_ptr<CompoundStmt> body;
+};
+
+struct ForeachStmt final : Stmt {
+    ForeachStmt(std::string bindingName,
+                Type bindingType,
+                std::unique_ptr<Expr> iterable,
+                std::unique_ptr<CompoundStmt> body,
+                SourceRange bindingRange,
+                SourceRange range)
+        : Stmt(StmtKind::Foreach, range),
+          bindingName(std::move(bindingName)),
+          bindingType(std::move(bindingType)),
+          iterable(std::move(iterable)),
+          body(std::move(body)),
+          bindingRange(bindingRange) {}
+
+    std::string bindingName {};
+    Type bindingType {};
+    std::unique_ptr<Expr> iterable;
+    std::unique_ptr<CompoundStmt> body;
+    SourceRange bindingRange {};
+};
+
+struct DoWhileStmt final : Stmt {
+    DoWhileStmt(std::unique_ptr<CompoundStmt> body, std::unique_ptr<Expr> condition, SourceRange range)
+        : Stmt(StmtKind::DoWhile, range), body(std::move(body)), condition(std::move(condition)) {}
+
+    std::unique_ptr<CompoundStmt> body;
+    std::unique_ptr<Expr> condition;
+};
+
+struct SwitchCasePattern {
+    std::unique_ptr<Expr> value;
+    bool isRange = false;
+    SourceRange range {};
+};
+
+struct SwitchCase {
+    std::vector<SwitchCasePattern> patterns {};
+    std::unique_ptr<CompoundStmt> body;
+    bool isDefault = false;
+    SourceRange range {};
+};
+
+struct SwitchStmt final : Stmt {
+    SwitchStmt(std::unique_ptr<Expr> condition, std::vector<SwitchCase> cases, SourceRange range)
+        : Stmt(StmtKind::Switch, range), condition(std::move(condition)), cases(std::move(cases)) {}
+
+    std::unique_ptr<Expr> condition;
+    std::vector<SwitchCase> cases {};
+};
+
+struct BreakStmt final : Stmt {
+    explicit BreakStmt(SourceRange range) : Stmt(StmtKind::Break, range) {}
+};
+
+struct ContinueStmt final : Stmt {
+    explicit ContinueStmt(SourceRange range) : Stmt(StmtKind::Continue, range) {}
 };
 
 }  // namespace axc

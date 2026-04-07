@@ -1,6 +1,8 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 enum ActorState as Flags {
     IsAlive,
     IsVisible,
@@ -17,3 +19,4 @@ fn main() int {
 // CHECK: enum.set
 // CHECK: enum.unset
 // CHECK: enum.toggle
+

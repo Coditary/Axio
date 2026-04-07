@@ -58,5 +58,7 @@ const ImportDecl* findImport(const TranslationUnit& unit, std::string_view name)
 
 bool compileCheckOnly(const std::filesystem::path& input);
 bool compileToLlvmIr(const std::filesystem::path& input, const std::filesystem::path& outputBase);
+bool compileToBinary(const std::filesystem::path& input, const std::filesystem::path& outputBase);
+std::optional<int> runBinary(const std::filesystem::path& binaryPath);
 
 }  // namespace axc::unit

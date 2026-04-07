@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn inc{step int}(x int) int {
     return x + step
 }
@@ -24,3 +26,4 @@ fn main() int {
 // CHECK: Let e:int
 // CHECK: Call
 // CHECK: Int 6
+

@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 fn main() int {
     let a int = 1 + 2 * 3 - 4 / 2 % 2
     let b int = (a & 7) | (a ^ 3)
@@ -27,3 +29,4 @@ fn main() int {
 // CHECK: Let d:int
 // CHECK: If
 // CHECK: Range
+

@@ -1,8 +1,11 @@
 // RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
 // RUN: %filecheck %s < %t.ll
 
+package main
+
 fn main() i64 {
     return 5
 }
 
 // CHECK: ret i64 5
+

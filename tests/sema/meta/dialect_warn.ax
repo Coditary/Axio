@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 fn main() int {
     %%SQL{
 SELECT * FROM users
@@ -8,3 +10,4 @@ SELECT * FROM users
 }
 
 // CHECK: warning: dialect blocks are parsed but not yet lowered
+

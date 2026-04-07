@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 struct Header align(64) {
     kind int bits 3
     flags int bits 5
@@ -25,3 +27,4 @@ class Msg {
 // CHECK: Element Team as Flag
 // CHECK: Class Msg
 // CHECK: Member print:str
+

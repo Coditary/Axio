@@ -1,8 +1,11 @@
 // RUN: %axc --emit-llvm-only %s -o %t
 
+package main
+
 class Obj {
 }
 
 fn inspect(x ref Obj) void {
     return
 }
+

@@ -1,6 +1,8 @@
 // RUN: %axc %s -o %tbin
 // RUN: %tbin; test "$?" = "14"
 
+package main
+
 class Obj {
     value int
 }
@@ -15,3 +17,4 @@ fn main() int {
     let second Obj = first
     return first.value + second.value
 }
+

@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
+package main
+
 class Box {
     fn ping() int {
         return 1
@@ -13,3 +15,4 @@ fn main() int {
 }
 
 // CHECK: warning: method call may dereference a nullable value; use '?.' or guard it with 'if value?'
+

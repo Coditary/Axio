@@ -4,6 +4,10 @@
 
 namespace axc {
 
+namespace detail {
+class MetaWorkflow;
+}
+
 class DiagnosticEngine;
 class SourceManager;
 
@@ -14,6 +18,8 @@ class MetaPipeline {
     void run(TranslationUnit& translationUnit) const;
 
   private:
+    friend class detail::MetaWorkflow;
+
     void validateAnnotations(TranslationUnit& translationUnit) const;
     void validateEmbedCalls(TranslationUnit& translationUnit) const;
 

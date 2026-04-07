@@ -1,5 +1,7 @@
 // RUN: %axc --check-only %s
 
+package main
+
 class Obj {
     value int
 }
@@ -15,3 +17,4 @@ fn main() int {
     keep(arc, weak_ref, unique)
     return 0
 }
+

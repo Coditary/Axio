@@ -1,5 +1,7 @@
 // RUN: %axc --dump-ast %s | %filecheck %s
 
+package main
+
 class Obj {
     value int
 }
@@ -33,3 +35,4 @@ fn main() int {
 // CHECK: Param x:Obj ref
 // CHECK: Let arc
 // CHECK: Init Obj
+
