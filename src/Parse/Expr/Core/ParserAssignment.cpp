@@ -17,7 +17,7 @@ std::unique_ptr<Expr> ExpressionParser::parseExpression() {
 }
 
 std::unique_ptr<Expr> ExpressionParser::parseAssignment() {
-    auto lhs = parsePipe();
+    auto lhs = parseLogicalOr();
     if (parser_.match(TokenKind::Equal)) {
         const SourceRange lhsRange = lhs->range;
         auto rhs = parseAssignment();
@@ -29,11 +29,6 @@ std::unique_ptr<Expr> ExpressionParser::parseAssignment() {
         auto rhs = parseAssignment();
         auto compoundValue = std::make_unique<BinaryExpr>(*compoundOp, detail::cloneExpr(*lhs), std::move(rhs), parser_.combine(lhsRange, rhs->range));
         return std::make_unique<BinaryExpr>(BinaryOp::Assign, std::move(lhs), std::move(compoundValue), parser_.combine(lhsRange, parser_.previous().range));
-    }
-    if (parser_.match(TokenKind::KwAs)) {
-        const SourceRange lhsRange = lhs->range;
-        Type targetType = DeclarationParser(parser_).parseType();
-        return std::make_unique<CastExpr>(std::move(lhs), std::move(targetType), parser_.combine(lhsRange, parser_.previous().range));
     }
     return lhs;
 }

@@ -17,16 +17,7 @@ std::unique_ptr<Expr> ExpressionParser::parseComparisonChain() {
     if (parser_.matchIdentifier("in")) {
         const SourceRange operatorRange = parser_.previous().range;
         auto rhs = parseBitwiseOr();
-        SourceRange end = rhs ? rhs->range : operatorRange;
-        SourceRange rangeOperator = operatorRange;
-        if (parser_.matchRangeOperator(&rangeOperator)) {
-            auto rangeEnd = parseBitwiseOr();
-            if (rangeEnd) {
-                end = rangeEnd->range;
-            } else {
-                end = rangeOperator;
-            }
-        }
+        const SourceRange end = rhs ? rhs->range : operatorRange;
         parser_.diagnostics_.error(parser_.combine(first->range, end), "range expressions are no longer supported");
         return std::make_unique<BoolLiteralExpr>(false, parser_.combine(first->range, end));
     }

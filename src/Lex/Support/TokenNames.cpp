@@ -11,11 +11,11 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::FloatLiteral: return "float literal";
         case TokenKind::CharLiteral: return "char literal";
         case TokenKind::StringLiteral: return "string literal";
-        case TokenKind::LlvmBlock: return "llvm block";
         case TokenKind::KwFn: return "fn";
         case TokenKind::KwLet: return "let";
         case TokenKind::KwConst: return "const";
         case TokenKind::KwPub: return "pub";
+        case TokenKind::KwPri: return "pri";
         case TokenKind::KwPackage: return "package";
         case TokenKind::KwReturn: return "return";
         case TokenKind::KwDefer: return "defer";
@@ -33,22 +33,11 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwDo: return "do";
         case TokenKind::KwBreak: return "break";
         case TokenKind::KwContinue: return "continue";
-        case TokenKind::KwAs: return "as";
-        case TokenKind::KwFlags: return "Flags";
-        case TokenKind::KwFlag: return "Flag";
-        case TokenKind::KwNew: return "new";
-        case TokenKind::KwWeak: return "weak";
-        case TokenKind::KwRef: return "ref";
         case TokenKind::KwUnsigned: return "unsigned";
-        case TokenKind::KwNull: return "null";
         case TokenKind::KwExtern: return "extern";
-        case TokenKind::KwLlvm: return "llvm";
-        case TokenKind::KwAlign: return "align";
-        case TokenKind::KwBits: return "bits";
         case TokenKind::KwInt: return "int";
         case TokenKind::KwVoid: return "void";
         case TokenKind::KwStr: return "str";
-        case TokenKind::KwError: return "error";
         case TokenKind::KwBool: return "bool";
         case TokenKind::KwTrue: return "true";
         case TokenKind::KwFalse: return "false";
@@ -80,10 +69,6 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Colon: return ":";
         case TokenKind::Semicolon: return ";";
         case TokenKind::Dot: return ".";
-        case TokenKind::At: return "@";
-        case TokenKind::Hash: return "#";
-        case TokenKind::Question: return "?";
-        case TokenKind::QuestionDot: return "?.";
         case TokenKind::Equal: return "=";
         case TokenKind::EqualEqual: return "==";
         case TokenKind::PlusEqual: return "+=";
@@ -117,8 +102,6 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Percent: return "%";
         case TokenKind::ShiftLeft: return "<<";
         case TokenKind::ShiftRight: return ">>";
-        case TokenKind::Arrow: return "->";
-        case TokenKind::FatArrow: return "=>";
     }
     return "token";
 }

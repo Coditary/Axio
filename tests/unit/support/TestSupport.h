@@ -9,7 +9,6 @@
 #include "axc/Codegen/LLVMEmitter.h"
 #include "axc/Driver/Compiler.h"
 #include "axc/Lex/Lexer.h"
-#include "axc/Meta/MetaPipeline.h"
 #include "axc/Parse/Parser.h"
 #include "axc/Sema/Sema.h"
 #include "axc/Support/Diagnostic.h"
@@ -45,7 +44,6 @@ bool loadSource(ParsedFile& file, const std::filesystem::path& path);
 bool lexSource(ParsedFile& file, const std::filesystem::path& path);
 bool parseSource(ParsedFile& file, const std::filesystem::path& path);
 bool analyzeSource(ParsedFile& file, const std::filesystem::path& path);
-bool analyzeAndRunMeta(ParsedFile& file, const std::filesystem::path& path);
 
 std::string renderDiagnostics(const DiagnosticEngine& diagnostics);
 bool hasDiagnosticContaining(const DiagnosticEngine& diagnostics, std::string_view needle, DiagnosticSeverity severity);

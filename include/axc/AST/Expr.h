@@ -13,11 +13,9 @@ enum class ExprKind {
     BoolLiteral,
     CharLiteral,
     StringLiteral,
-    NullLiteral,
     DeclRef,
     Unary,
     Binary,
-    Cast,
     Call,
     Member,
     Initializer,
@@ -34,7 +32,6 @@ enum class UnaryOp {
     PreDecrement,
     PostIncrement,
     PostDecrement,
-    IsNonNull,
 };
 
 /// @brief Binary operators supported by the language surface.
@@ -57,11 +54,6 @@ enum class BinaryOp {
     GreaterEqual,
     LogicalAnd,
     LogicalOr,
-    Set,
-    Unset,
-    Toggle,
-    Is,
-    IsNot,
     Assign,
 };
 
@@ -114,11 +106,6 @@ struct StringLiteralExpr final : Expr {
     std::string value {};
 };
 
-/// @brief `null` literal expression.
-struct NullLiteralExpr final : Expr {
-    explicit NullLiteralExpr(SourceRange range) : Expr(ExprKind::NullLiteral, range) {}
-};
-
 /// @brief Reference to a declaration or symbol name.
 struct DeclRefExpr final : Expr {
     explicit DeclRefExpr(std::string name, SourceRange range)
@@ -146,42 +133,24 @@ struct BinaryExpr final : Expr {
     std::unique_ptr<Expr> rhs;
 };
 
-/// @brief Explicit cast using `expr as Type` syntax.
-struct CastExpr final : Expr {
-    CastExpr(std::unique_ptr<Expr> value, Type targetType, SourceRange range)
-        : Expr(ExprKind::Cast, range), value(std::move(value)), targetType(std::move(targetType)) {}
-
-    std::unique_ptr<Expr> value;
-    Type targetType {};
-};
-
 /// @brief Function or method call expression.
 struct CallExpr final : Expr {
-    CallExpr(std::unique_ptr<Expr> callee,
-             std::vector<std::unique_ptr<Expr>> compileArguments,
-             std::vector<std::unique_ptr<Expr>> runtimeArguments,
-             bool nullSafe,
-             SourceRange range)
+    CallExpr(std::unique_ptr<Expr> callee, std::vector<std::unique_ptr<Expr>> arguments, SourceRange range)
         : Expr(ExprKind::Call, range),
           callee(std::move(callee)),
-          compileArguments(std::move(compileArguments)),
-          runtimeArguments(std::move(runtimeArguments)),
-          nullSafe(nullSafe) {}
+          arguments(std::move(arguments)) {}
 
     std::unique_ptr<Expr> callee;
-    std::vector<std::unique_ptr<Expr>> compileArguments {};
-    std::vector<std::unique_ptr<Expr>> runtimeArguments {};
-    bool nullSafe = false;
+    std::vector<std::unique_ptr<Expr>> arguments {};
 };
 
-/// @brief Member access expression, optionally null-safe.
+/// @brief Member access expression.
 struct MemberExpr final : Expr {
-    MemberExpr(std::unique_ptr<Expr> base, std::string member, bool nullSafe, SourceRange range)
-        : Expr(ExprKind::Member, range), base(std::move(base)), member(std::move(member)), nullSafe(nullSafe) {}
+    MemberExpr(std::unique_ptr<Expr> base, std::string member, SourceRange range)
+        : Expr(ExprKind::Member, range), base(std::move(base)), member(std::move(member)) {}
 
     std::unique_ptr<Expr> base;
     std::string member {};
-    bool nullSafe = false;
 };
 
 /// @brief Structured initializer or array-literal expression.

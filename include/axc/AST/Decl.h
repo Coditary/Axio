@@ -23,7 +23,6 @@ struct Decl {
     DeclKind kind;
     std::string name {};
     std::string localName {};
-    std::vector<Annotation> annotations {};
     SourceRange range {};
     Visibility visibility = Visibility::Private;
     std::string moduleName {};
@@ -64,42 +63,26 @@ struct StructDecl final : Decl {
         : Decl(DeclKind::Struct, std::move(name), range) {}
 
     std::vector<StructField> fields {};
-    std::int64_t alignment = 0;
 };
 
-/// @brief Enum-level metadata parameter.
-struct EnumParam {
-    std::string name {};
-    Type type {};
-    SourceRange range {};
-};
-
-/// @brief Single enum element, optionally with payload types or nested flag items.
+/// @brief Single enum element.
 struct EnumElement {
     std::string name {};
-    std::vector<Type> payloadTypes {};
-    std::vector<std::unique_ptr<Expr>> payloadValues {};
-    std::vector<std::unique_ptr<Decl>> nestedDecls {};
-    bool isFlagGroup = false;
-    std::optional<std::uint64_t> constantValue {};
     SourceRange range {};
 };
 
-/// @brief Enum declaration, including flag-style enums.
+/// @brief Enum declaration.
 struct EnumDecl final : Decl {
     EnumDecl(std::string name, SourceRange range)
         : Decl(DeclKind::Enum, std::move(name), range) {}
 
-    std::vector<EnumParam> parameters {};
     std::vector<EnumElement> elements {};
-    bool isFlags = false;
 };
 
-/// @brief Field or dynamic member declared inside a class.
+/// @brief Field declared inside a class.
 struct ClassMember {
     std::string name {};
     Type type {};
-    std::unique_ptr<Expr> dynamicValue {};
     SourceRange range {};
     Visibility visibility = Visibility::Private;
 };
@@ -109,7 +92,6 @@ struct ClassDecl final : Decl {
     ClassDecl(std::string name, SourceRange range)
         : Decl(DeclKind::Class, std::move(name), range) {}
 
-    std::vector<std::string> includedStructs {};
     std::vector<ClassMember> members {};
     std::vector<std::unique_ptr<Decl>> methods {};
 };
@@ -118,7 +100,6 @@ struct ClassDecl final : Decl {
 struct Parameter {
     std::string name {};
     Type type {};
-    bool isCompileTime = false;
     SourceRange range {};
     bool isConst = false;
 };
@@ -128,24 +109,15 @@ struct FunctionDecl final : Decl {
     FunctionDecl(std::string name, SourceRange range)
         : Decl(DeclKind::Function, std::move(name), range) {}
 
-    std::vector<Parameter> compileParameters {};
-    std::vector<Parameter> runtimeParameters {};
-    std::vector<Type> returnTypes {};
+    std::vector<Parameter> parameters {};
+    std::optional<Type> returnType {};
     std::unique_ptr<CompoundStmt> body {};
-    std::string llvmBody {};
-    SourceRange llvmBodyRange {};
     bool isExtern = false;
-    bool isLlvm = false;
     std::string receiverType {};
 
     /// @brief Returns whether the function has no runtime return values.
     [[nodiscard]] bool returnsVoid() const {
-        return returnTypes.empty() || (returnTypes.size() == 1 && returnTypes.front().isVoid());
-    }
-
-    /// @brief Number of runtime values produced by the function.
-    [[nodiscard]] std::size_t returnValueCount() const {
-        return returnsVoid() ? 0U : returnTypes.size();
+        return !returnType.has_value() || returnType->isVoid();
     }
 };
 
@@ -153,7 +125,6 @@ struct FunctionDecl final : Decl {
 struct TranslationUnit {
     std::string packageName {};
     SourceRange packageRange {};
-    std::vector<PreprocessorDirective> preprocessorDirectives {};
     std::vector<std::unique_ptr<Decl>> declarations {};
 };
 

@@ -5,7 +5,6 @@
 - C-like syntax and mental model
 - fast front-end evolution without tight coupling between phases
 - high-quality diagnostics with room for multi-error recovery
-- explicit metaprogramming stages instead of one magical macro system
 - LLVM as the final backend
 
 ## Pipeline
@@ -20,7 +19,7 @@
    - keeps a re2c grammar file so the project can move to generated lexing cleanly
 
 3. `Parser`
-   - builds an AST for declarations, statements, expressions, and annotations
+   - builds an AST for declarations, statements, and expressions
    - already includes synchronization hooks for future multi-error recovery
 
 4. `Module Loader`
@@ -32,13 +31,9 @@
 5. `Sema`
    - validates symbol usage before codegen
    - checks const storage rules for globals, locals, and parameters
-   - validates class/member access, ownership constraints, and nullability rules
+   - validates class/member access, arrays, pointers, enums, and scalar compatibility
 
-6. `MetaPipeline`
-    - validates annotations
-    - is the intended insertion point for AST rewriting passes
-
-7. `LLVMEmitter`
+6. `LLVMEmitter`
    - lowers AST nodes to LLVM IR
    - emits `.ll`
    - emits native object files through the host target machine
@@ -121,9 +116,8 @@ This keeps package identity explicit and makes interface hashes stable when only
 ## Why the modules are split this way
 
 - parser changes should not force LLVM backend edits
-- metaprogramming should not live inside the parser
 - diagnostics should be reusable by lexer, parser, semantic analysis, and backend validation
-- future semantic analysis should become its own phase between parser and meta/codegen
+- semantic analysis should stay its own phase between parser and codegen
 
 ## Feature growth plan
 
@@ -138,11 +132,6 @@ For a serious language implementation, add these modules next:
 - `IR/`
   - compiler-owned mid-level IR
   - easier optimization and AST transforms before LLVM lowering
-
-- `Passes/`
-  - AST passes
-  - IR passes
-  - annotation handlers
 
 - `Runtime/`
   - ABI helpers

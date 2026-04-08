@@ -14,9 +14,6 @@ inline std::optional<std::string> qualifiedNameFromExpr(const Expr& expr) {
             return static_cast<const DeclRefExpr&>(expr).name;
         case ExprKind::Member: {
             const auto& member = static_cast<const MemberExpr&>(expr);
-            if (member.nullSafe) {
-                return std::nullopt;
-            }
             auto base = qualifiedNameFromExpr(*member.base);
             if (!base.has_value()) {
                 return std::nullopt;

@@ -17,7 +17,7 @@ class SourceManager;
 /// @brief Internal orchestration object for the CLI compiler pipeline.
 ///
 /// This class wires together source loading, module loading, optional AST
-/// dumping, semantic analysis, meta validation, and LLVM emission.
+/// dumping, semantic analysis, and LLVM emission.
 class CompilerWorkflow {
   public:
     /// @brief Create a workflow using already-parsed compile options.
@@ -29,7 +29,7 @@ class CompilerWorkflow {
   private:
     /// @brief Load the primary input file into the source manager.
     bool loadSource(SourceManager& sourceManager, std::string& errorMessage) const;
-    /// @brief Run module loading, parsing, semantic analysis, and meta validation.
+    /// @brief Run module loading, parsing, and semantic analysis.
     bool runFrontEnd(TranslationUnit& unit, SourceManager& sourceManager, DiagnosticEngine& diagnostics) const;
     /// @brief Decide whether the workflow should stop after producing an AST dump.
     bool shouldStopAfterAstDump(const TranslationUnit& unit) const;

@@ -46,48 +46,46 @@ bool ModuleInterfaceBuilder::build(const TranslationUnit& unit, const std::strin
     }
 
     for (const auto& decl : unit.declarations) {
-        if (decl->kind != DeclKind::Import || decl->visibility != Visibility::Public) {
-            continue;
-        }
-
-        const auto& importDecl = static_cast<const ImportDecl&>(*decl);
-        auto importedInterfaceIt = moduleInterfaces_.find(importDecl.name);
-        if (importedInterfaceIt == moduleInterfaces_.end()) {
-            diagnostics_.error(importDecl.range, "cannot re-export unknown module '" + importDecl.name + "'");
-            continue;
-        }
-
-        const ModuleInterface& importedInterface = importedInterfaceIt->second;
-        if (importDecl.importedNames.empty()) {
-            for (const auto& [name, symbol] : importedInterface.exportedSymbols) {
-                if (interface.declaredSymbols.contains(name)) {
-                    diagnostics_.error(importDecl.range,
-                                       "cannot re-export '" + name + "' because the module already declares a symbol with that name");
-                    continue;
-                }
-                addExport(interface, symbol, importDecl.range);
-            }
-            continue;
-        }
-
-        for (const auto& name : importDecl.importedNames) {
-            auto symbolIt = importedInterface.exportedSymbols.find(name);
-            if (symbolIt == importedInterface.exportedSymbols.end()) {
-                diagnostics_.error(importDecl.range,
-                                   "module '" + importDecl.name + "' does not export '" + name + "'");
-                continue;
-            }
-            if (interface.declaredSymbols.contains(name)) {
-                diagnostics_.error(importDecl.range,
-                                   "cannot re-export '" + name + "' because the module already declares a symbol with that name");
-                continue;
-            }
-            addExport(interface, symbolIt->second, importDecl.range);
+        if (decl->kind == DeclKind::Import && decl->visibility == Visibility::Public) {
+            addImportExports(interface, static_cast<const ImportDecl&>(*decl));
         }
     }
 
     finalizeFingerprint(interface);
     return !diagnostics_.hasErrors();
+}
+
+void ModuleInterfaceBuilder::addImportExports(ModuleInterface& interface, const ImportDecl& importDecl) const {
+    auto importedInterfaceIt = moduleInterfaces_.find(importDecl.name);
+    if (importedInterfaceIt == moduleInterfaces_.end()) {
+        return;
+    }
+
+    const ModuleInterface& importedInterface = importedInterfaceIt->second;
+    if (importDecl.importedNames.empty()) {
+        for (const auto& [name, symbol] : importedInterface.exportedSymbols) {
+            if (interface.declaredSymbols.contains(name)) {
+                diagnostics_.error(importDecl.range,
+                                   "cannot re-export '" + name + "' because the module already declares a symbol with that name");
+                continue;
+            }
+            addExport(interface, symbol, importDecl.range);
+        }
+        return;
+    }
+
+    for (const auto& name : importDecl.importedNames) {
+        auto symbolIt = importedInterface.exportedSymbols.find(name);
+        if (symbolIt == importedInterface.exportedSymbols.end()) {
+            continue;
+        }
+        if (interface.declaredSymbols.contains(name)) {
+            diagnostics_.error(importDecl.range,
+                               "cannot re-export '" + name + "' because the module already declares a symbol with that name");
+            continue;
+        }
+        addExport(interface, symbolIt->second, importDecl.range);
+    }
 }
 
 std::string ModuleInterfaceBuilder::declSignature(const Decl& decl) const {
@@ -116,11 +114,7 @@ std::string ModuleInterfaceBuilder::declSignature(const Decl& decl) const {
         }
         case DeclKind::Enum: {
             const auto& enumDecl = static_cast<const EnumDecl&>(decl);
-            out << "enum " << enumDecl.localName << (enumDecl.isFlags ? " flags" : "") << '(';
-            for (const auto& param : enumDecl.parameters) {
-                out << param.name << ':' << typeSignature(param.type) << ';';
-            }
-            out << "){";
+            out << "enum " << enumDecl.localName << '{';
             for (const auto& element : enumDecl.elements) {
                 out << element.name << ';';
             }
@@ -141,12 +135,8 @@ std::string ModuleInterfaceBuilder::declSignature(const Decl& decl) const {
         }
         case DeclKind::Function: {
             const auto& functionDecl = static_cast<const FunctionDecl&>(decl);
-            out << (functionDecl.isLlvm ? "fn llvm " : "fn ") << functionDecl.localName << '{';
-            for (const auto& param : functionDecl.compileParameters) {
-                out << (param.isConst ? "const " : "") << param.name << ':' << typeSignature(param.type) << ';';
-            }
-            out << "}|(";
-            for (const auto& param : functionDecl.runtimeParameters) {
+            out << "fn " << functionDecl.localName << '(';
+            for (const auto& param : functionDecl.parameters) {
                 if (!functionDecl.receiverType.empty() && param.name == "self") {
                     continue;
                 }
@@ -156,9 +146,7 @@ std::string ModuleInterfaceBuilder::declSignature(const Decl& decl) const {
             if (functionDecl.returnsVoid()) {
                 out << "void;";
             } else {
-                for (const auto& returnType : functionDecl.returnTypes) {
-                    out << typeSignature(returnType) << ';';
-                }
+                out << typeSignature(*functionDecl.returnType) << ';';
             }
             break;
         }
@@ -168,19 +156,6 @@ std::string ModuleInterfaceBuilder::declSignature(const Decl& decl) const {
 
 std::string ModuleInterfaceBuilder::typeSignature(const Type& type) const {
     std::ostringstream out;
-    for (TypeModifier modifier : type.modifiers) {
-        switch (modifier) {
-            case TypeModifier::Ref:
-                out << "ref ";
-                break;
-            case TypeModifier::Weak:
-                out << "weak ";
-                break;
-            case TypeModifier::Unique:
-                out << '*';
-                break;
-        }
-    }
     out << type.name;
     for (std::size_t i = 0; i < type.pointerDepth; ++i) {
         out << '*';

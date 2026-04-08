@@ -19,6 +19,8 @@ class ModuleInterfaceBuilder {
 
     /// @brief Populate `interface` from `unit` and compute its API fingerprint.
     bool build(const TranslationUnit& unit, const std::string& moduleName, ModuleInterface& interface) const;
+    /// @brief Add exports from one import declaration using the currently known interfaces.
+    void addImportExports(ModuleInterface& interface, const ImportDecl& importDecl) const;
 
   private:
     /// @brief Produce a stable signature string for one declaration.

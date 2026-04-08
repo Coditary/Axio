@@ -1,15 +1,34 @@
 #include "../Internal/LLVMEmitterInternal.h"
 
-#include <llvm/AsmParser/Parser.h>
 #include <llvm/IR/Argument.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Linker/Linker.h>
-#include <llvm/Support/SourceMgr.h>
 
 #include "axc/Support/Diagnostic.h"
 
 namespace axc {
+
+bool ModuleEmitter::stmtAlwaysReturns(const Stmt& stmt) const {
+    switch (stmt.kind) {
+        case StmtKind::Return:
+            return true;
+        case StmtKind::Compound: {
+            const auto& block = static_cast<const CompoundStmt&>(stmt);
+            for (const auto& child : block.statements) {
+                if (stmtAlwaysReturns(*child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        case StmtKind::If: {
+            const auto& ifStmt = static_cast<const IfStmt&>(stmt);
+            return ifStmt.elseBranch != nullptr && stmtAlwaysReturns(*ifStmt.thenBlock) && stmtAlwaysReturns(*ifStmt.elseBranch);
+        }
+        default:
+            return false;
+    }
+}
 
 void ModuleEmitter::declareStruct(const StructDecl& declaration) {
     auto* structType = llvm::StructType::create(context_, declaration.name);
@@ -34,24 +53,7 @@ void ModuleEmitter::declareClass(const ClassDecl& declaration) {
 
     std::vector<llvm::Type*> fields;
     AggregateLayout layout;
-    for (const auto& includedStruct : declaration.includedStructs) {
-        auto it = aggregateLayouts_.find(includedStruct);
-        if (it == aggregateLayouts_.end()) {
-            continue;
-        }
-        for (const auto& [fieldName, index] : it->second.fieldIndices) {
-            layout.fieldIndices[fieldName] = layout.fieldTypes.size() + index;
-        }
-        for (const auto& type : it->second.fieldTypes) {
-            layout.fieldTypes.push_back(type);
-            fields.push_back(lowerType(type));
-        }
-    }
-
     for (const auto& member : declaration.members) {
-        if (member.dynamicValue) {
-            continue;
-        }
         layout.fieldIndices[member.name] = layout.fieldTypes.size();
         layout.fieldTypes.push_back(member.type);
         fields.push_back(lowerType(member.type));
@@ -89,7 +91,7 @@ void ModuleEmitter::declareGlobal(const GlobalVarDecl& declaration) {
                                             llvm::GlobalValue::ExternalLinkage,
                                             initializer,
                                             declaration.name);
-    globals_[declaration.name] = Symbol {global, storageType, isNullableStorageType(storageType)};
+    globals_[declaration.name] = Symbol {global, storageType};
 }
 
 void ModuleEmitter::declareFunction(const FunctionDecl& declaration) {
@@ -111,11 +113,8 @@ void ModuleEmitter::declareFunction(const FunctionDecl& declaration) {
     }
 
     std::vector<llvm::Type*> params;
-    params.reserve(declaration.compileParameters.size() + declaration.runtimeParameters.size());
-    for (const Parameter& param : declaration.compileParameters) {
-        params.push_back(lowerType(param.type));
-    }
-    for (const Parameter& param : declaration.runtimeParameters) {
+    params.reserve(declaration.parameters.size());
+    for (const Parameter& param : declaration.parameters) {
         params.push_back(lowerType(param.type));
     }
 
@@ -124,18 +123,8 @@ void ModuleEmitter::declareFunction(const FunctionDecl& declaration) {
 
     std::size_t index = 0;
     for (llvm::Argument& arg : function->args()) {
-        if (index < declaration.compileParameters.size()) {
-            arg.setName(declaration.compileParameters[index].name);
-        } else {
-            arg.setName(declaration.runtimeParameters[index - declaration.compileParameters.size()].name);
-        }
+        arg.setName(declaration.parameters[index].name);
         ++index;
-    }
-
-    for (const Annotation& annotation : declaration.annotations) {
-        if (annotation.name == "inline") {
-            function->addFnAttr(llvm::Attribute::AlwaysInline);
-        }
     }
 
     functions_[loweredName] = function;
@@ -172,15 +161,6 @@ void ModuleEmitter::defineFunction(const FunctionDecl& declaration) {
         return;
     }
 
-    if (declaration.isLlvm) {
-        if (!importInlineLlvmBody(*function, declaration, loweredName)) {
-            function->eraseFromParent();
-            functions_.erase(loweredName);
-            functionDecls_.erase(loweredName);
-        }
-        return;
-    }
-
     if (declaration.body == nullptr) {
         return;
     }
@@ -193,16 +173,10 @@ void ModuleEmitter::defineFunction(const FunctionDecl& declaration) {
 
     std::size_t index = 0;
     for (llvm::Argument& arg : function->args()) {
-        const Parameter& parameter = index < declaration.compileParameters.size()
-            ? declaration.compileParameters[index]
-            : declaration.runtimeParameters[index - declaration.compileParameters.size()];
+        const Parameter& parameter = declaration.parameters[index];
         llvm::AllocaInst* alloca = createEntryAlloca(function, arg.getType(), arg.getName());
-        llvm::Value* storedArg = &arg;
-        if (storedArg->getType()->isPointerTy()) {
-            storedArg = retainForStorage(storedArg, parameter.type);
-        }
-        builder_.CreateStore(storedArg, alloca);
-        locals_[parameter.name] = Symbol {alloca, parameter.type, isNullableStorageType(parameter.type)};
+        builder_.CreateStore(&arg, alloca);
+        locals_[parameter.name] = Symbol {alloca, parameter.type};
         ++index;
     }
 
@@ -214,8 +188,11 @@ void ModuleEmitter::defineFunction(const FunctionDecl& declaration) {
 
     if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
         if (declaration.returnsVoid()) {
-            releaseLocals();
             builder_.CreateRetVoid();
+        } else if (stmtAlwaysReturns(*declaration.body)) {
+            llvm::BasicBlock* deadBlock = builder_.GetInsertBlock();
+            builder_.ClearInsertionPoint();
+            deadBlock->eraseFromParent();
         } else {
             diagnostics_.error(declaration.range, "control reaches end of non-void function '" + declaration.name + "'");
             function->eraseFromParent();
@@ -227,51 +204,6 @@ void ModuleEmitter::defineFunction(const FunctionDecl& declaration) {
     if (llvm::verifyFunction(*function, &llvm::errs())) {
         diagnostics_.error(declaration.range, "LLVM verification failed for function '" + declaration.name + "'");
     }
-}
-
-bool ModuleEmitter::importInlineLlvmBody(llvm::Function& destination, const FunctionDecl& declaration, const std::string& loweredName) {
-    destination.eraseFromParent();
-
-    std::string moduleText;
-    std::string errorMessage;
-    if (!buildInlineLlvmModuleText(declaration, loweredName, moduleText, errorMessage)) {
-        diagnostics_.error(declaration.llvmBodyRange.begin.offset == 0 && declaration.llvmBodyRange.end.offset == 0 ? declaration.range : declaration.llvmBodyRange,
-                           errorMessage);
-        return false;
-    }
-
-    llvm::SMDiagnostic parseError;
-    std::unique_ptr<llvm::Module> parsedModule = llvm::parseAssemblyString(moduleText, parseError, context_);
-    if (!parsedModule) {
-        diagnostics_.error(declaration.llvmBodyRange.begin.offset == 0 && declaration.llvmBodyRange.end.offset == 0 ? declaration.range : declaration.llvmBodyRange,
-                           "invalid llvm function body: " + parseError.getMessage().str());
-        return false;
-    }
-
-    llvm::Function* parsedFunction = parsedModule->getFunction(loweredName);
-    if (parsedFunction == nullptr) {
-        diagnostics_.error(declaration.range, "inline llvm body did not define the expected function");
-        return false;
-    }
-
-    if (llvm::Linker::linkModules(*module_, std::move(parsedModule))) {
-        diagnostics_.error(declaration.range, "failed to link inline llvm function '" + declaration.name + "'");
-        return false;
-    }
-
-    llvm::Function* linkedFunction = module_->getFunction(loweredName);
-    if (linkedFunction == nullptr) {
-        diagnostics_.error(declaration.range, "inline llvm body did not define the expected function");
-        return false;
-    }
-    functions_[loweredName] = linkedFunction;
-
-    if (llvm::verifyFunction(*linkedFunction, &llvm::errs())) {
-        diagnostics_.error(declaration.range, "LLVM verification failed for function '" + declaration.name + "'");
-        return false;
-    }
-
-    return true;
 }
 
 }  // namespace axc

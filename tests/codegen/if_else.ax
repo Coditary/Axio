@@ -15,5 +15,3 @@ fn main() int {
 // CHECK: br i1
 // CHECK: if.then
 // CHECK: if.else
-// CHECK: if.end
-

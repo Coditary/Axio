@@ -145,20 +145,18 @@ std::unique_ptr<Stmt> StatementParser::parseStatement() {
 
 std::unique_ptr<Stmt> StatementParser::parseReturnStmt() {
     const SourceRange start = parser_.advance().range;
-    std::vector<std::unique_ptr<Expr>> values;
+    std::unique_ptr<Expr> value;
 
     if (!parser_.isSeparator(parser_.current()) && !parser_.check(TokenKind::RBrace)) {
-        do {
-            values.push_back(ExpressionParser(parser_).parseExpression());
-        } while (parser_.match(TokenKind::Comma));
+        value = ExpressionParser(parser_).parseExpression();
     }
 
     SourceRange end = start;
-    if (!values.empty()) {
-        end = values.back()->range;
+    if (value) {
+        end = value->range;
     }
     parser_.consumeOptionalStatementTerminator();
-    return std::make_unique<ReturnStmt>(std::move(values), parser_.combine(start, end));
+    return std::make_unique<ReturnStmt>(std::move(value), parser_.combine(start, end));
 }
 
 std::unique_ptr<Stmt> StatementParser::parseDeferStmt() {
@@ -202,7 +200,7 @@ std::unique_ptr<Stmt> StatementParser::parseLetStmt() {
 
 LetBinding StatementParser::parseLetBinding() {
     LetBinding binding;
-    if (!(parser_.check(TokenKind::Identifier) || parser_.check(TokenKind::KwWeak))) {
+    if (!parser_.check(TokenKind::Identifier)) {
         parser_.diagnostics_.error(parser_.current().range, "expected variable name after 'let'");
         return binding;
     }
@@ -339,13 +337,6 @@ std::unique_ptr<Stmt> StatementParser::parseSwitchStmt() {
                 auto first = ExpressionParser(parser_).parseBitwiseOr();
                 if (!first) {
                     break;
-                }
-                SourceRange rangeOperator = first->range;
-                if (parser_.matchRangeOperator(&rangeOperator)) {
-                    const SourceRange rangeStart = first->range;
-                    auto endExpr = ExpressionParser(parser_).parseBitwiseOr();
-                    const SourceRange rangeEnd = endExpr ? endExpr->range : rangeOperator;
-                    parser_.diagnostics_.error(parser_.combine(rangeStart, rangeEnd), "switch range cases are no longer supported");
                 }
                 SwitchCasePattern pattern;
                 pattern.range = first->range;

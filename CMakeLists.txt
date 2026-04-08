@@ -27,7 +27,6 @@ set(AXC_CORE_SOURCES
     src/Driver/Module/ModuleImportResolver.cpp
     src/Driver/Module/ModuleInterface.cpp
     src/Driver/Module/ModuleQualifier.cpp
-    src/Support/InlineLlvm.cpp
     src/Support/Source/SourceManager.cpp
     src/Support/Diagnostics/DiagnosticEngine.cpp
     src/AST/Print/ASTPrinter.cpp
@@ -39,7 +38,6 @@ set(AXC_CORE_SOURCES
     src/Parse/Stmt/ParserStmt.cpp
     src/Parse/Expr/Core/ParserEntry.cpp
     src/Parse/Expr/Core/ParserAssignment.cpp
-    src/Parse/Expr/Core/ParserPipe.cpp
     src/Parse/Expr/Logical/ParserLogical.cpp
     src/Parse/Expr/Logical/ParserComparison.cpp
     src/Parse/Expr/Arithmetic/ParserBitwise.cpp
@@ -53,10 +51,6 @@ set(AXC_CORE_SOURCES
     src/Sema/Core/SemaAnalysis.cpp
     src/Sema/Decl/SemaDecl.cpp
     src/Sema/Expr/SemaExpr.cpp
-    src/Meta/Core/MetaPipeline.cpp
-    src/Meta/Core/MetaWorkflow.cpp
-    src/Meta/Annotations/MetaPipelineAnnotations.cpp
-    src/Meta/Embedding/MetaPipelineEmbed.cpp
     src/Codegen/Core/LLVMEmitter.cpp
     src/Codegen/Core/LLVMEmitterModule.cpp
     src/Codegen/Core/ModuleEmissionWorkflow.cpp

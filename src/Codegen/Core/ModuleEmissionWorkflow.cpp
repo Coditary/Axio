@@ -9,7 +9,6 @@ ModuleEmissionWorkflow::ModuleEmissionWorkflow(ModuleEmitter& emitter) : emitter
 
 std::unique_ptr<llvm::Module> ModuleEmissionWorkflow::emit(const TranslationUnit& translationUnit) {
     emitter_.module_->setSourceFileName(emitter_.sourceManager_.path().string());
-    emitter_.declareRuntimeFunctions();
     collectClassMetadata(translationUnit);
     collectEnums(translationUnit);
     declareAggregates(translationUnit);

@@ -33,6 +33,8 @@ class ModuleLoader {
                              const std::filesystem::path& filePath,
                              const std::string& moduleName,
                              bool isEntryModule);
+    /// @brief Seed a provisional public interface so import cycles can resolve re-exports.
+    void seedModuleInterface(const TranslationUnit& unit, const std::string& moduleName);
     /// @brief Parse a module file into a translation unit.
     bool parseModuleFile(const std::filesystem::path& path, TranslationUnit& unit);
     /// @brief Resolve the source path for an import relative to the project root.

@@ -16,14 +16,6 @@ void ASTPrinter::print(const TranslationUnit& unit) const {
     if (!unit.packageName.empty()) {
         out_ << "Package " << unit.packageName << '\n';
     }
-    for (const auto& directive : unit.preprocessorDirectives) {
-        out_ << "Preprocessor #" << directive.name;
-        for (const auto& arg : directive.arguments) {
-            out_ << ' ' << arg;
-        }
-        out_ << '\n';
-    }
-
     for (const auto& decl : unit.declarations) {
         printDecl(*decl, 0);
     }
@@ -37,10 +29,6 @@ void ASTPrinter::indent(int level) const {
 
 void ASTPrinter::printDecl(const Decl& decl, int level) const {
     indent(level);
-    for (const auto& annotation : decl.annotations) {
-        out_ << "Annotation @" << annotation.name << '\n';
-        indent(level);
-    }
     switch (decl.kind) {
         case DeclKind::Import: {
             const auto& importDecl = static_cast<const ImportDecl&>(decl);
@@ -74,38 +62,23 @@ void ASTPrinter::printDecl(const Decl& decl, int level) const {
         case DeclKind::Function: {
             const auto& fn = static_cast<const FunctionDecl&>(decl);
             out_ << visibilityPrefix(fn.visibility) << "Function " << fn.name;
-            if (fn.isLlvm) {
-                out_ << " [llvm]";
-            }
             out_ << '\n';
-            for (const auto& param : fn.compileParameters) {
-                indent(level + 1);
-                out_ << "CompileParam " << (param.isConst ? "const " : "") << param.name << ':';
-                printType(param.type);
-                out_ << '\n';
-            }
-            for (const auto& param : fn.runtimeParameters) {
+            for (const auto& param : fn.parameters) {
                 indent(level + 1);
                 out_ << "Param " << (param.isConst ? "const " : "") << param.name << ':';
                 printType(param.type);
                 out_ << '\n';
             }
-            if (!fn.returnTypes.empty()) {
+            if (fn.returnType.has_value()) {
                 indent(level + 1);
-                out_ << "Returns";
-                for (const auto& type : fn.returnTypes) {
-                    out_ << ' ';
-                    printType(type);
-                }
+                out_ << "Returns ";
+                printType(*fn.returnType);
                 out_ << '\n';
             } else if (fn.returnsVoid()) {
                 indent(level + 1);
                 out_ << "Returns void\n";
             }
-            if (fn.isLlvm) {
-                indent(level + 1);
-                out_ << "LLVMBody\n";
-            } else if (fn.body) {
+            if (fn.body) {
                 printStmt(*fn.body, level + 1);
             }
             break;
@@ -117,27 +90,16 @@ void ASTPrinter::printDecl(const Decl& decl, int level) const {
                 indent(level + 1);
                 out_ << "Field " << field.name << ':';
                 printType(field.type);
-                if (field.bitWidth >= 0) {
-                    out_ << " bits " << field.bitWidth;
-                }
                 out_ << '\n';
             }
             break;
         }
         case DeclKind::Enum: {
             const auto& en = static_cast<const EnumDecl&>(decl);
-            out_ << visibilityPrefix(en.visibility) << "Enum " << en.name;
-            if (en.isFlags) {
-                out_ << " as Flags";
-            }
-            out_ << '\n';
+            out_ << visibilityPrefix(en.visibility) << "Enum " << en.name << '\n';
             for (const auto& element : en.elements) {
                 indent(level + 1);
-                out_ << "Element " << element.name;
-                if (element.isFlagGroup) {
-                    out_ << " as Flag";
-                }
-                out_ << '\n';
+                out_ << "Element " << element.name << '\n';
             }
             break;
         }
@@ -159,48 +121,9 @@ void ASTPrinter::printDecl(const Decl& decl, int level) const {
 }
 
 void ASTPrinter::printType(const Type& type) const {
-    const bool hasUnique = std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Unique) != type.modifiers.end();
-    const bool hasRef = std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Ref) != type.modifiers.end();
-    const bool hasWeak = std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Weak) != type.modifiers.end();
-
-    const bool prefixQualifiers = !hasUnique && type.name != "Obj";
-    if (prefixQualifiers) {
-        if (hasRef) {
-            out_ << "ref ";
-        }
-        if (hasWeak) {
-            out_ << "weak ";
-        }
-    }
-    for (const auto& modifier : type.modifiers) {
-        switch (modifier) {
-            case TypeModifier::Ref:
-                break;
-            case TypeModifier::Weak:
-                break;
-            case TypeModifier::Unique:
-                break;
-        }
-    }
     out_ << type.name;
     for (std::size_t i = 0; i < type.pointerDepth; ++i) {
         out_ << '*';
-    }
-    if (hasUnique) {
-        if (hasRef) {
-            out_ << " ref";
-        }
-        if (hasWeak) {
-            out_ << " weak";
-        }
-        out_ << " *";
-    } else if (!prefixQualifiers) {
-        if (hasRef) {
-            out_ << " ref";
-        }
-        if (hasWeak) {
-            out_ << " weak";
-        }
     }
     for (const auto& extent : type.arrayExtents) {
         out_ << '[';

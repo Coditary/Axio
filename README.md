@@ -1,19 +1,18 @@
 # Axio Compiler Prototype
 
-Axio is a modular compiler prototype for a C-like language, implemented in C++ with a build pipeline that targets LLVM IR, native object files, and final binaries.
+Axio is a modular compiler prototype for a small C-like language MVP, implemented in C++ with a build pipeline that targets LLVM IR, native object files, and final binaries.
 
-The repository is structured so that lexer, parser, AST, metaprogramming passes, diagnostics, and LLVM lowering stay isolated. The goal is to make new language features land in focused modules instead of turning the compiler into a single giant file.
+The repository is structured so that lexer, parser, AST, semantic analysis, diagnostics, module loading, and LLVM lowering stay isolated. The goal is to keep new language work in focused modules instead of turning the compiler into a single giant file.
 
 ## What is already implemented
 
 - CMake project with LLVM integration and optional re2c-based lexer generation
-- C-like surface syntax for `struct`, `extern`, functions, local variables, integer arithmetic, string literals, line/block comments, pointer syntax, address-of, dereference, `return`, `defer`, and inline LLVM functions
-- AST-driven parsing with a clean separation between lexing, parsing, meta passes, and code generation
-- explicit module loading with public interfaces, selective imports, and re-exports
-- semantic validation for `const` globals, locals, and parameters
+- MVP surface syntax for `package`, `import`, `pub`, `pri`, `fn`, `extern fn`, `struct`, `class`, `enum`, arrays, pointers, `const`, local variables, arithmetic, comparisons, strings, and comments
+- Control flow for `if`, `while`, `for`, `do while`, `switch`, `break`, `continue`, `defer`, and `return`
+- AST-driven parsing with a clean separation between lexing, parsing, semantic analysis, and code generation
+- explicit module loading with public interfaces, selective imports, re-exports, import aliases, and cyclic module handling
+- semantic validation for declarations, functions, classes, arrays, and scalar type compatibility
 - Diagnostic engine with source ranges, line and column rendering, and caret markers
-- Simple metaprogramming hooks:
-  - annotations such as `@inline`
 - LLVM backend that emits `.ll`, `.o`, and a linked binary
 
 ## Language notes
@@ -35,11 +34,6 @@ The repository is structured so that lexer, parser, AST, metaprogramming passes,
 - overlapping constant switch cases are rejected during semantic analysis
 - switch patterns must be compile-time constants
 - dense value-only switches lower through LLVM `switch`
-- `fn llvm name(...) ... { ... }` lets you define a function body directly in LLVM IR
-  - the body must contain only LLVM IR, no Axio statements
-  - the inline LLVM body is parsed and verified before Axio accepts it
-  - inline LLVM currently supports exactly one return value
-
 ## Build
 
 Requirements:
@@ -116,9 +110,7 @@ See `examples/hello.ax` and `examples/assets/banner.txt`.
 - `src/Driver/Module`
   - single-file parsing, module interfaces, import binding rules, qualification, and recursive loading
 - `include/axc/Sema`, `src/Sema`
-  - semantic validation for symbols, const rules, ownership checks, and class/member usage
-- `include/axc/Meta`, `src/Meta`
-  - annotation validation pipeline and future pass insertion points
+  - semantic validation for symbols, declarations, scalar compatibility, arrays, enums, pointers, and class/member usage
 - `include/axc/Codegen`, `src/Codegen`
   - LLVM IR lowering split by declarations, expressions, statements, and module workflow
 - `include/axc/Driver`, `src/Driver`
@@ -165,16 +157,6 @@ The package interface fingerprint is derived from the exported API surface, so p
 - `const` local bindings are immutable inside their scope
 - `const` function parameters cannot be reassigned
 - these checks run in semantic analysis before code generation
-
-## Metaprogramming model roadmap
-
-The current codebase establishes the extension points for a multi-stage language model:
-
-1. preprocessing stage
-2. annotation-driven AST transforms
-3. LLVM IR transformation stage
-
-Right now the repository contains the skeleton and first working examples for annotation validation and later pass insertion. The next step is to promote those hooks into a formal plugin/pass API.
 
 ## Performance notes
 

@@ -79,29 +79,14 @@ void ModuleQualifier::qualifyDecl(std::unique_ptr<Decl>& decl, const ResolutionC
         }
         case DeclKind::Enum: {
             auto& enumDecl = static_cast<EnumDecl&>(*decl);
-            for (auto& param : enumDecl.parameters) {
-                qualifyType(param.type, context);
-            }
             for (auto& element : enumDecl.elements) {
-                for (auto& payloadType : element.payloadTypes) {
-                    qualifyType(payloadType, context);
-                }
-                for (auto& payloadValue : element.payloadValues) {
-                    qualifyExpr(payloadValue, context, {});
-                }
             }
             break;
         }
         case DeclKind::Class: {
             auto& classDecl = static_cast<ClassDecl&>(*decl);
-            for (auto& includedStruct : classDecl.includedStructs) {
-                includedStruct = resolveTypeName(includedStruct, context, decl->range);
-            }
             for (auto& member : classDecl.members) {
                 qualifyType(member.type, context);
-                if (member.dynamicValue) {
-                    qualifyExpr(member.dynamicValue, context, {});
-                }
             }
             for (auto& method : classDecl.methods) {
                 auto& functionDecl = static_cast<FunctionDecl&>(*method);
@@ -112,16 +97,13 @@ void ModuleQualifier::qualifyDecl(std::unique_ptr<Decl>& decl, const ResolutionC
         }
         case DeclKind::Function: {
             auto& functionDecl = static_cast<FunctionDecl&>(*decl);
-            for (auto& param : functionDecl.compileParameters) {
-                qualifyType(param.type, context);
-            }
             std::unordered_set<std::string> locals;
-            for (auto& param : functionDecl.runtimeParameters) {
+            for (auto& param : functionDecl.parameters) {
                 qualifyType(param.type, context);
                 locals.insert(param.name);
             }
-            for (auto& returnType : functionDecl.returnTypes) {
-                qualifyType(returnType, context);
+            if (functionDecl.returnType.has_value()) {
+                qualifyType(*functionDecl.returnType, context);
             }
             if (!functionDecl.receiverType.empty()) {
                 functionDecl.receiverType = resolveTypeName(functionDecl.receiverType, context, functionDecl.range);
@@ -149,8 +131,8 @@ void ModuleQualifier::qualifyStmt(std::unique_ptr<Stmt>& stmt,
         }
         case StmtKind::Return: {
             auto& ret = static_cast<ReturnStmt&>(*stmt);
-            for (auto& value : ret.values) {
-                qualifyExpr(value, context, locals);
+            if (ret.value) {
+                qualifyExpr(ret.value, context, locals);
             }
             break;
         }
@@ -266,19 +248,10 @@ void ModuleQualifier::qualifyExpr(std::unique_ptr<Expr>& expr,
             qualifyExpr(binary.rhs, context, locals);
             break;
         }
-        case ExprKind::Cast: {
-            auto& cast = static_cast<CastExpr&>(*expr);
-            qualifyExpr(cast.value, context, locals);
-            qualifyType(cast.targetType, context);
-            break;
-        }
         case ExprKind::Call: {
             auto& call = static_cast<CallExpr&>(*expr);
             qualifyExpr(call.callee, context, locals);
-            for (auto& arg : call.compileArguments) {
-                qualifyExpr(arg, context, locals);
-            }
-            for (auto& arg : call.runtimeArguments) {
+            for (auto& arg : call.arguments) {
                 qualifyExpr(arg, context, locals);
             }
             break;
@@ -309,7 +282,6 @@ void ModuleQualifier::qualifyExpr(std::unique_ptr<Expr>& expr,
         case ExprKind::BoolLiteral:
         case ExprKind::CharLiteral:
         case ExprKind::StringLiteral:
-        case ExprKind::NullLiteral:
             break;
     }
 }
@@ -437,7 +409,7 @@ std::string ModuleQualifier::resolveTypeName(const std::string& name,
 std::unique_ptr<Expr> ModuleQualifier::buildQualifiedExpr(const QualifiedPath& path, SourceRange range) const {
     std::unique_ptr<Expr> expr = std::make_unique<DeclRefExpr>(path.baseQualifiedName, range);
     for (const auto& segment : path.trailingSegments) {
-        expr = std::make_unique<MemberExpr>(std::move(expr), segment, false, range);
+        expr = std::make_unique<MemberExpr>(std::move(expr), segment, range);
     }
     return expr;
 }
@@ -461,8 +433,8 @@ bool ModuleQualifier::isVisibleModuleName(const std::string& candidate, const Re
 
 bool ModuleQualifier::isBuiltinTypeName(const std::string& name) const {
     static const std::unordered_set<std::string> builtinNames {
-        "int", "void", "str", "error", "bool", "i2", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
-        "short", "long", "double", "float", "f8", "f16", "f32", "f64", "char", "null"
+        "int", "void", "str", "bool", "i2", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
+        "short", "long", "double", "float", "f8", "f16", "f32", "f64", "char"
     };
     return builtinNames.contains(name);
 }

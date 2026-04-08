@@ -30,9 +30,6 @@ bool ModuleLoader::loadInto(TranslationUnit& rootUnit, const std::filesystem::pa
             continue;
         }
         auto& unit = moduleIt->second.unit;
-        for (auto& directive : unit.preprocessorDirectives) {
-            rootUnit.preprocessorDirectives.push_back(std::move(directive));
-        }
         std::vector<std::unique_ptr<Decl>> declarations;
         declarations.swap(unit.declarations);
         for (auto& decl : declarations) {
@@ -55,8 +52,7 @@ bool ModuleLoader::loadModuleRecursive(const std::filesystem::path& projectRoot,
                                        bool isEntryModule) {
     const std::string loadingKey = moduleName.empty() ? filePath.string() : moduleName;
     if (loadingModules_.contains(loadingKey)) {
-        diagnostics_.error(SourceRange {}, "cyclic module import involving '" + loadingKey + "'");
-        return false;
+        return !diagnostics_.hasErrors();
     }
 
     if (!moduleName.empty()) {
@@ -95,6 +91,8 @@ bool ModuleLoader::loadModuleRecursive(const std::filesystem::path& projectRoot,
         return !diagnostics_.hasErrors();
     }
 
+    seedModuleInterface(parsedUnit, actualModuleName);
+
     for (const auto& decl : parsedUnit.declarations) {
         if (decl->kind != DeclKind::Import) {
             continue;
@@ -131,6 +129,27 @@ bool ModuleLoader::loadModuleRecursive(const std::filesystem::path& projectRoot,
     loadingModules_.erase(loadingKey);
 
     return !diagnostics_.hasErrors();
+}
+
+void ModuleLoader::seedModuleInterface(const TranslationUnit& unit, const std::string& moduleName) {
+    auto& interface = moduleInterfaces_[moduleName];
+    interface.moduleName = moduleName;
+
+    for (const auto& decl : unit.declarations) {
+        if (decl->kind == DeclKind::Import) {
+            continue;
+        }
+
+        detail::ModuleSymbol symbol;
+        symbol.publicName = decl->localName;
+        symbol.qualifiedName = detail::qualifyModuleSymbol(moduleName, decl->localName);
+        symbol.kind = decl->kind;
+        symbol.visibility = decl->visibility;
+        interface.declaredSymbols[symbol.publicName] = symbol;
+        if (decl->visibility == Visibility::Public) {
+            interface.exportedSymbols[symbol.publicName] = symbol;
+        }
+    }
 }
 
 bool ModuleLoader::parseModuleFile(const std::filesystem::path& path, TranslationUnit& unit) {

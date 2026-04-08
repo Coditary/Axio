@@ -16,6 +16,7 @@ std::vector<Token> Lexer::lex() {
         {"let", TokenKind::KwLet},
         {"const", TokenKind::KwConst},
         {"pub", TokenKind::KwPub},
+        {"pri", TokenKind::KwPri},
         {"package", TokenKind::KwPackage},
         {"return", TokenKind::KwReturn},
         {"defer", TokenKind::KwDefer},
@@ -33,22 +34,11 @@ std::vector<Token> Lexer::lex() {
         {"do", TokenKind::KwDo},
         {"break", TokenKind::KwBreak},
         {"continue", TokenKind::KwContinue},
-        {"as", TokenKind::KwAs},
-        {"Flags", TokenKind::KwFlags},
-        {"Flag", TokenKind::KwFlag},
-        {"new", TokenKind::KwNew},
-        {"weak", TokenKind::KwWeak},
-        {"ref", TokenKind::KwRef},
         {"unsigned", TokenKind::KwUnsigned},
-        {"null", TokenKind::KwNull},
         {"extern", TokenKind::KwExtern},
-        {"llvm", TokenKind::KwLlvm},
-        {"align", TokenKind::KwAlign},
-        {"bits", TokenKind::KwBits},
         {"int", TokenKind::KwInt},
         {"void", TokenKind::KwVoid},
         {"str", TokenKind::KwStr},
-        {"error", TokenKind::KwError},
         {"bool", TokenKind::KwBool},
         {"true", TokenKind::KwTrue},
         {"false", TokenKind::KwFalse},
@@ -75,11 +65,6 @@ std::vector<Token> Lexer::lex() {
     const std::string_view source = sourceManager_.source();
     std::vector<Token> tokens;
     std::size_t cursor = 0;
-    bool afterFnKeyword = false;
-    bool llvmSignatureMode = false;
-    bool llvmSawFunctionName = false;
-    bool llvmSawRuntimeParamList = false;
-    int llvmParenDepth = 0;
 
     auto push = [&](TokenKind kind, std::size_t begin, std::size_t end, std::string lexeme = {}) {
         tokens.push_back(Token {kind, std::move(lexeme), SourceRange {SourceLocation {begin}, SourceLocation {end}}});
@@ -185,26 +170,8 @@ std::vector<Token> Lexer::lex() {
             const auto it = keywords.find(lexeme);
             if (it != keywords.end()) {
                 push(it->second, begin, cursor, lexeme);
-                if (it->second == TokenKind::KwFn) {
-                    afterFnKeyword = true;
-                } else if (afterFnKeyword && it->second == TokenKind::KwLlvm) {
-                    llvmSignatureMode = true;
-                    llvmSawFunctionName = false;
-                    llvmSawRuntimeParamList = false;
-                    llvmParenDepth = 0;
-                    afterFnKeyword = false;
-                } else {
-                    if (llvmSignatureMode && !llvmSawFunctionName) {
-                        llvmSawFunctionName = true;
-                    }
-                    afterFnKeyword = false;
-                }
             } else {
                 push(TokenKind::Identifier, begin, cursor, lexeme);
-                if (llvmSignatureMode && !llvmSawFunctionName) {
-                    llvmSawFunctionName = true;
-                }
-                afterFnKeyword = false;
             }
             continue;
         }
@@ -238,11 +205,6 @@ std::vector<Token> Lexer::lex() {
             return cursor + 2 < source.size() && source[cursor] == a && source[cursor + 1] == b && source[cursor + 2] == c;
         };
 
-        if (two('?', '.')) {
-            cursor += 2;
-            push(TokenKind::QuestionDot, begin, cursor, "?.");
-            continue;
-        }
         if (two('=', '=')) {
             cursor += 2;
             push(TokenKind::EqualEqual, begin, cursor, "==");
@@ -343,93 +305,13 @@ std::vector<Token> Lexer::lex() {
             push(TokenKind::ShiftRight, begin, cursor, ">>");
             continue;
         }
-        if (two('-', '>')) {
-            cursor += 2;
-            push(TokenKind::Arrow, begin, cursor, "->");
-            continue;
-        }
-        if (two('=', '>')) {
-            cursor += 2;
-            push(TokenKind::FatArrow, begin, cursor, "=>");
-            continue;
-        }
-
-        if (llvmSignatureMode && source[cursor] == '{' && llvmSawRuntimeParamList && llvmParenDepth == 0) {
-            const std::size_t blockBegin = cursor;
-            const std::size_t contentBegin = cursor + 1;
-            std::size_t depth = 1;
-            bool inString = false;
-            bool escaping = false;
-            bool inComment = false;
-            ++cursor;
-            while (cursor < source.size() && depth > 0) {
-                const char current = source[cursor];
-                if (inComment) {
-                    if (current == '\n') {
-                        inComment = false;
-                    }
-                    ++cursor;
-                    continue;
-                }
-                if (inString) {
-                    if (escaping) {
-                        escaping = false;
-                    } else if (current == '\\') {
-                        escaping = true;
-                    } else if (current == '"') {
-                        inString = false;
-                    }
-                    ++cursor;
-                    continue;
-                }
-                if (current == ';') {
-                    inComment = true;
-                    ++cursor;
-                    continue;
-                }
-                if (current == '"') {
-                    inString = true;
-                    ++cursor;
-                    continue;
-                }
-                if (current == '{') {
-                    ++depth;
-                } else if (current == '}') {
-                    --depth;
-                }
-                ++cursor;
-            }
-            if (depth != 0) {
-                diagnostics_.error(sourceManager_.range(blockBegin, source.size()), "unterminated llvm function body");
-                break;
-            }
-
-            const std::size_t blockEnd = cursor;
-            push(TokenKind::LlvmBlock, blockBegin, blockEnd, std::string(source.substr(contentBegin, blockEnd - contentBegin - 1)));
-            llvmSignatureMode = false;
-            llvmSawFunctionName = false;
-            llvmSawRuntimeParamList = false;
-            llvmParenDepth = 0;
-            afterFnKeyword = false;
-            continue;
-        }
-
         ++cursor;
         switch (source[begin]) {
             case '(':
                 push(TokenKind::LParen, begin, cursor, "(");
-                if (llvmSignatureMode) {
-                    ++llvmParenDepth;
-                }
                 break;
             case ')':
                 push(TokenKind::RParen, begin, cursor, ")");
-                if (llvmSignatureMode && llvmParenDepth > 0) {
-                    --llvmParenDepth;
-                    if (llvmParenDepth == 0 && llvmSawFunctionName && !llvmSawRuntimeParamList) {
-                        llvmSawRuntimeParamList = true;
-                    }
-                }
                 break;
             case '{': push(TokenKind::LBrace, begin, cursor, "{"); break;
             case '}': push(TokenKind::RBrace, begin, cursor, "}"); break;
@@ -439,9 +321,6 @@ std::vector<Token> Lexer::lex() {
             case ':': push(TokenKind::Colon, begin, cursor, ":"); break;
             case ';': push(TokenKind::Semicolon, begin, cursor, ";"); break;
             case '.': push(TokenKind::Dot, begin, cursor, "."); break;
-            case '@': push(TokenKind::At, begin, cursor, "@"); break;
-            case '#': push(TokenKind::Hash, begin, cursor, "#"); break;
-            case '?': push(TokenKind::Question, begin, cursor, "?"); break;
             case '=': push(TokenKind::Equal, begin, cursor, "="); break;
             case '!': push(TokenKind::Bang, begin, cursor, "!"); break;
             case '<': push(TokenKind::Less, begin, cursor, "<"); break;

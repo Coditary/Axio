@@ -10,167 +10,23 @@ namespace axc {
 ModuleEmitter::ModuleEmitter(const SourceManager& sourceManager, DiagnosticEngine& diagnostics)
     : sourceManager_(sourceManager), diagnostics_(diagnostics), module_(std::make_unique<llvm::Module>("axio_module", context_)), builder_(context_) {}
 
-void ModuleEmitter::declareRuntimeFunctions() {
-    llvm::Type* voidPtrTy = llvm::PointerType::get(context_, 0);
-    llvm::Type* i64Ty = llvm::Type::getInt64Ty(context_);
-    llvm::Type* voidTy = llvm::Type::getVoidTy(context_);
-
-    runtime_.arcAlloc = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_arc_alloc", voidPtrTy, i64Ty).getCallee());
-    runtime_.arcRetain = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_arc_retain", voidPtrTy, voidPtrTy).getCallee());
-    runtime_.arcRelease = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_arc_release", voidTy, voidPtrTy).getCallee());
-    runtime_.weakInit = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_weak_init", voidPtrTy, voidPtrTy).getCallee());
-    runtime_.weakRelease = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_weak_release", voidTy, voidPtrTy).getCallee());
-    runtime_.weakLoad = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_weak_load", voidPtrTy, voidPtrTy).getCallee());
-    runtime_.arcStrongCount = llvm::cast<llvm::Function>(module_->getOrInsertFunction("axio_arc_strong_count", i64Ty, voidPtrTy).getCallee());
-}
-
-bool ModuleEmitter::isArcOwnedType(const Type& type) const {
-    if (type.name == "str" || type.name == "error") {
-        return false;
-    }
-    if (!isClassType(type)) {
-        return false;
-    }
-    for (TypeModifier modifier : type.modifiers) {
-        if (modifier == TypeModifier::Ref || modifier == TypeModifier::Weak || modifier == TypeModifier::Unique) {
-            return false;
-        }
-    }
-    return structTypes_.contains(type.name);
-}
-
-bool ModuleEmitter::isWeakType(const Type& type) const {
-    return std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Weak) != type.modifiers.end();
-}
-
-bool ModuleEmitter::isUniqueType(const Type& type) const {
-    return std::find(type.modifiers.begin(), type.modifiers.end(), TypeModifier::Unique) != type.modifiers.end();
-}
-
-bool ModuleEmitter::isClassType(const Type& type) const {
-    return classFieldNames_.contains(type.name) || classMethodNames_.contains(type.name);
-}
-
-llvm::Value* ModuleEmitter::retainForStorage(llvm::Value* value, const Type& type) {
-    if (value == nullptr || !value->getType()->isPointerTy()) {
-        return value;
-    }
-    llvm::Value* asVoidPtr = builder_.CreatePointerCast(value, llvm::PointerType::get(context_, 0), "retain.cast");
-    if (isWeakType(type)) {
-        llvm::Value* weakValue = builder_.CreateCall(runtime_.weakInit, {asVoidPtr}, "weak.init");
-        return builder_.CreatePointerCast(weakValue, value->getType(), "weak.cast");
-    }
-    if (isArcOwnedType(type)) {
-        llvm::Value* retained = builder_.CreateCall(runtime_.arcRetain, {asVoidPtr}, "arc.retain");
-        return builder_.CreatePointerCast(retained, value->getType(), "arc.cast");
-    }
-    return value;
-}
-
-bool ModuleEmitter::shouldRetainForStorage(const Expr& expr, const Type& type) const {
-    if (!isArcOwnedType(type) && !isWeakType(type)) {
-        return false;
-    }
-    switch (expr.kind) {
-        case ExprKind::DeclRef:
-            return true;
-        case ExprKind::NullLiteral:
-        case ExprKind::Initializer:
-        case ExprKind::Call:
-            return false;
-        default:
-            return true;
-    }
-}
-
-void ModuleEmitter::releaseStoredValue(llvm::Value* address, const Type& type) {
-    if (address == nullptr) {
-        return;
-    }
-    llvm::Type* llvmType = lowerType(type);
-    if (!llvmType->isPointerTy()) {
-        return;
-    }
-    llvm::Value* current = builder_.CreateLoad(llvmType, address, "release.load");
-    llvm::Value* asVoidPtr = builder_.CreatePointerCast(current, llvm::PointerType::get(context_, 0), "release.cast");
-    if (isWeakType(type)) {
-        builder_.CreateCall(runtime_.weakRelease, {asVoidPtr});
-        return;
-    }
-    if (isArcOwnedType(type)) {
-        builder_.CreateCall(runtime_.arcRelease, {asVoidPtr});
-    }
-}
-
-void ModuleEmitter::releaseLocals() {
-    for (const auto& [_, symbol] : locals_) {
-        releaseStoredValue(symbol.address, symbol.type);
-    }
-}
-
 std::unique_ptr<llvm::Module> ModuleEmitter::emit(const TranslationUnit& translationUnit) {
     return detail::ModuleEmissionWorkflow(*this).emit(translationUnit);
 }
 
 void ModuleEmitter::collectEnum(const EnumDecl& declaration) {
     EnumValueInfo info;
-    info.isFlags = declaration.isFlags;
     std::uint64_t nextValue = 0;
-    std::uint64_t nextFlagBit = 0;
     for (const auto& element : declaration.elements) {
-        const std::uint64_t assigned = element.constantValue.has_value()
-            ? *element.constantValue
-            : (declaration.isFlags ? (1ULL << nextFlagBit) : nextValue);
-        info.values[element.name] = assigned;
-        if (!declaration.isFlags) {
-            info.maxOrdinal = assigned > info.maxOrdinal ? assigned : info.maxOrdinal;
-            ++nextValue;
-        } else {
-            ++nextFlagBit;
-        }
-        if (!declaration.parameters.empty() && element.payloadValues.size() == declaration.parameters.size()) {
-            for (std::size_t i = 0; i < declaration.parameters.size(); ++i) {
-                if (const auto* intLiteral = dynamic_cast<const IntegerLiteralExpr*>(element.payloadValues[i].get())) {
-                    info.paramValues[element.name][declaration.parameters[i].name] = static_cast<std::uint64_t>(intLiteral->value);
-                }
-            }
-        }
-        std::uint64_t nestedValue = 0;
-        std::uint64_t nestedFlagBit = 0;
-        for (const auto& nestedDecl : element.nestedDecls) {
-            if (nestedDecl->kind != DeclKind::Enum) {
-                continue;
-            }
-            const auto& nestedEnum = static_cast<const EnumDecl&>(*nestedDecl);
-            for (const auto& nestedElement : nestedEnum.elements) {
-                const std::uint64_t nestedAssigned = element.isFlagGroup ? (1ULL << (nextFlagBit + nestedFlagBit++)) : nestedValue++;
-                info.values[element.name + "." + nestedElement.name] = nestedAssigned;
-            }
-        }
-        if (element.isFlagGroup) {
-            nextFlagBit += nestedFlagBit;
-        }
+        info.values[element.name] = nextValue;
+        info.maxOrdinal = nextValue;
+        ++nextValue;
     }
     enumValues_[declaration.name] = std::move(info);
 }
 
 bool ModuleEmitter::isUnsignedType(const Type& type) const {
     return type.name == "u8" || type.name == "u16" || type.name == "u32" || type.name == "u64";
-}
-
-bool ModuleEmitter::isNullableStorageType(const Type& type) const {
-    if (type.name == "str" || type.name == "error") {
-        return true;
-    }
-    if (type.pointerDepth > 0) {
-        return true;
-    }
-    for (TypeModifier modifier : type.modifiers) {
-        if (modifier == TypeModifier::Ref || modifier == TypeModifier::Weak || modifier == TypeModifier::Unique) {
-            return true;
-        }
-    }
-    return isClassType(type);
 }
 
 llvm::Value* ModuleEmitter::castValueToType(llvm::Value* value, const Type& targetType) {
@@ -192,20 +48,17 @@ llvm::Value* ModuleEmitter::castValueToType(llvm::Value* value, const Type& targ
         }
         return builder_.CreateIntCast(value, target, !isUnsignedType(targetType), "intcast");
     }
-    if (target->isPointerTy() && value->getType()->isIntegerTy(1)) {
-        return builder_.CreateIntToPtr(builder_.CreateZExt(value, llvm::Type::getInt64Ty(context_), "booltoint"), target, "booltoptr");
-    }
     if (target->isFloatingPointTy() && value->getType()->isFloatingPointTy()) {
         return builder_.CreateFPCast(value, target, "fpcast");
     }
     if (target->isFloatingPointTy() && value->getType()->isIntegerTy()) {
         return isUnsignedType(targetType) ? builder_.CreateUIToFP(value, target, "uitofp") : builder_.CreateSIToFP(value, target, "sitofp");
     }
-    if (target->isIntegerTy(1) && value->getType()->isPointerTy()) {
-        return builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "ptrtobool");
-    }
     if (target->isIntegerTy() && value->getType()->isFloatingPointTy()) {
         return isUnsignedType(targetType) ? builder_.CreateFPToUI(value, target, "fptoui") : builder_.CreateFPToSI(value, target, "fptosi");
+    }
+    if (target->isIntegerTy(1) && value->getType()->isPointerTy()) {
+        return builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "ptrtobool");
     }
     if (target->isPointerTy() && value->getType()->isPointerTy()) {
         return builder_.CreatePointerCast(value, target, "ptrcast");
@@ -246,20 +99,15 @@ llvm::Constant* ModuleEmitter::lowerConstantExpr(const Expr& expr, const Type& t
             return llvm::dyn_cast<llvm::Constant>(castValueToType(llvm::ConstantFP::get(llvm::Type::getDoubleTy(context_),
                                                                                          static_cast<const FloatLiteralExpr&>(expr).value),
                                                                   targetType));
-        case ExprKind::NullLiteral:
-            return llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(lowerType(targetType)));
-        case ExprKind::Cast:
-            return lowerConstantExpr(*static_cast<const CastExpr&>(expr).value, targetType);
         default:
-            break;
+            return nullptr;
     }
-    return nullptr;
 }
 
 llvm::Type* ModuleEmitter::lowerType(const Type& type) {
     llvm::Type* lowered = nullptr;
 
-    if (type.name.empty() || type.name == "int" || type.name == "error" || type.name == "i32") {
+    if (type.name.empty() || type.name == "int" || type.name == "i32") {
         lowered = llvm::Type::getInt32Ty(context_);
     } else if (type.name == "i2") {
         lowered = llvm::Type::getIntNTy(context_, 2);
@@ -320,11 +168,6 @@ llvm::Type* ModuleEmitter::lowerType(const Type& type) {
     for (std::size_t i = 0; i < type.pointerDepth; ++i) {
         lowered = llvm::PointerType::get(context_, 0);
     }
-    for (TypeModifier modifier : type.modifiers) {
-        if (modifier == TypeModifier::Ref || modifier == TypeModifier::Weak || modifier == TypeModifier::Unique) {
-            lowered = llvm::PointerType::get(context_, 0);
-        }
-    }
     return lowered;
 }
 
@@ -333,41 +176,14 @@ bool ModuleEmitter::isLowerableFunction(const FunctionDecl& declaration) {
     return true;
 }
 
-Type ModuleEmitter::functionReturnType(const FunctionDecl& declaration) {
-    if (declaration.returnsVoid()) {
-        Type type;
-        type.name = "void";
-        type.range = declaration.range;
-        return type;
-    }
-    return declaration.returnTypes.front();
-}
-
 llvm::Type* ModuleEmitter::lowerFunctionReturnType(const FunctionDecl& declaration) {
     if (declaration.returnsVoid()) {
         return llvm::Type::getVoidTy(context_);
     }
-    if (declaration.returnTypes.size() == 1) {
-        if (isArcOwnedType(declaration.returnTypes.front())) {
-            llvm::Type* lowered = lowerType(declaration.returnTypes.front());
-            return llvm::PointerType::get(context_, 0);
-        }
-        return lowerType(declaration.returnTypes.front());
-    }
-
-    std::vector<llvm::Type*> elementTypes;
-    elementTypes.reserve(declaration.returnTypes.size());
-    for (const auto& type : declaration.returnTypes) {
-        if (isArcOwnedType(type)) {
-            elementTypes.push_back(llvm::PointerType::get(context_, 0));
-        } else {
-            elementTypes.push_back(lowerType(type));
-        }
-    }
-    return llvm::StructType::get(context_, elementTypes, false);
+    return lowerType(*declaration.returnType);
 }
 
-Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) const {
+Type ModuleEmitter::inferExprType(const Expr& expr) const {
     switch (expr.kind) {
         case ExprKind::Initializer: {
             Type type;
@@ -384,9 +200,6 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
                 type.name = init.typeName;
             }
             type.range = expr.range;
-            if (isClassType(type) || (init.initKind != InitKind::Value && init.initKind != InitKind::ArrayLiteral)) {
-                ++type.pointerDepth;
-            }
             return type;
         }
         case ExprKind::StringLiteral: {
@@ -397,7 +210,7 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
         }
         case ExprKind::FloatLiteral: {
             Type type;
-            type.name = "f64";
+            type.name = "double";
             type.range = expr.range;
             return type;
         }
@@ -413,6 +226,12 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
             type.range = expr.range;
             return type;
         }
+        case ExprKind::IntegerLiteral: {
+            Type type;
+            type.name = "int";
+            type.range = expr.range;
+            return type;
+        }
         case ExprKind::DeclRef: {
             const auto& ref = static_cast<const DeclRefExpr&>(expr);
             auto symbol = lookupSymbol(ref.name);
@@ -425,7 +244,7 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
             const auto& call = static_cast<const CallExpr&>(expr);
             if (call.callee->kind == ExprKind::DeclRef) {
                 const auto& callee = static_cast<const DeclRefExpr&>(*call.callee);
-                if (callee.name == "len" && call.runtimeArguments.size() == 1) {
+                if (callee.name == "len" && call.arguments.size() == 1) {
                     Type type;
                     type.name = "int";
                     type.range = expr.range;
@@ -434,19 +253,11 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
             }
             if (auto calleeName = moduleQualifiedName(*call.callee); calleeName.has_value()) {
                 auto it = functionDecls_.find(*calleeName);
-                if (it != functionDecls_.end()) {
-                    const FunctionDecl* declaration = it->second;
-                    if (valueIndex < declaration->returnValueCount()) {
-                        return declaration->returnTypes[valueIndex];
-                    }
+                if (it != functionDecls_.end() && it->second->returnType.has_value()) {
+                    return *it->second->returnType;
                 }
             }
             break;
-        }
-        case ExprKind::Cast: {
-            Type type = static_cast<const CastExpr&>(expr).targetType;
-            type.range = expr.range;
-            return type;
         }
         case ExprKind::Member: {
             const auto& member = static_cast<const MemberExpr&>(expr);
@@ -471,37 +282,37 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
         }
         case ExprKind::Unary: {
             const auto& unary = static_cast<const UnaryExpr&>(expr);
-            if (unary.op == UnaryOp::IsNonNull) {
-                Type type;
-                type.name = "bool";
-                type.range = expr.range;
-                return type;
-            }
-            if (unary.op == UnaryOp::PreIncrement || unary.op == UnaryOp::PreDecrement || unary.op == UnaryOp::PostIncrement ||
-                unary.op == UnaryOp::PostDecrement) {
-                Type operandType = inferExprType(*unary.operand);
-                operandType.range = expr.range;
-                return operandType;
-            }
             Type operandType = inferExprType(*unary.operand);
             if (unary.op == UnaryOp::AddressOf) {
                 ++operandType.pointerDepth;
-                operandType.range = expr.range;
-                return operandType;
+            } else if (unary.op == UnaryOp::Dereference && operandType.pointerDepth > 0) {
+                --operandType.pointerDepth;
             }
-            if (unary.op == UnaryOp::Dereference) {
-                if (operandType.pointerDepth > 0) {
-                    --operandType.pointerDepth;
-                } else if (!operandType.modifiers.empty()) {
-                    operandType.modifiers.erase(operandType.modifiers.begin());
-                }
-                operandType.range = expr.range;
-                return operandType;
-            }
-            break;
+            operandType.range = expr.range;
+            return operandType;
         }
-        default:
-            break;
+        case ExprKind::Binary: {
+            const auto& binary = static_cast<const BinaryExpr&>(expr);
+            switch (binary.op) {
+                case BinaryOp::Equal:
+                case BinaryOp::NotEqual:
+                case BinaryOp::Less:
+                case BinaryOp::LessEqual:
+                case BinaryOp::Greater:
+                case BinaryOp::GreaterEqual:
+                case BinaryOp::LogicalAnd:
+                case BinaryOp::LogicalOr: {
+                    Type type;
+                    type.name = "bool";
+                    type.range = expr.range;
+                    return type;
+                }
+                case BinaryOp::Assign:
+                    return inferExprType(*binary.lhs);
+                default:
+                    return inferExprType(*binary.lhs);
+            }
+        }
     }
 
     Type fallback;
@@ -512,7 +323,7 @@ Type ModuleEmitter::inferExprType(const Expr& expr, std::size_t valueIndex) cons
 
 std::optional<std::string> ModuleEmitter::inferClassTypeName(const Expr& expr) const {
     Type type = inferExprType(expr);
-    if (isClassType(type)) {
+    if (classFieldNames_.contains(type.name) || classMethodNames_.contains(type.name)) {
         return type.name;
     }
     return std::nullopt;
@@ -523,8 +334,12 @@ std::optional<std::string> ModuleEmitter::moduleQualifiedName(const Expr& expr) 
     if (!name.has_value()) {
         return std::nullopt;
     }
-    const std::string root = name->substr(0, name->find('.'));
-    if (locals_.contains(root) || globals_.contains(*name)) {
+    const std::size_t split = name->find('.');
+    if (split == std::string::npos) {
+        return name;
+    }
+    const std::string root = name->substr(0, split);
+    if (locals_.contains(root) || globals_.contains(root)) {
         return std::nullopt;
     }
     return name;

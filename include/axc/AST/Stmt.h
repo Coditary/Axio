@@ -36,12 +36,12 @@ struct CompoundStmt final : Stmt {
     std::vector<std::unique_ptr<Stmt>> statements {};
 };
 
-/// @brief Return statement supporting multiple return values.
+/// @brief Return statement supporting an optional single return value.
 struct ReturnStmt final : Stmt {
-    ReturnStmt(std::vector<std::unique_ptr<Expr>> values, SourceRange range)
-        : Stmt(StmtKind::Return, range), values(std::move(values)) {}
+    ReturnStmt(std::unique_ptr<Expr> value, SourceRange range)
+        : Stmt(StmtKind::Return, range), value(std::move(value)) {}
 
-    std::vector<std::unique_ptr<Expr>> values {};
+    std::unique_ptr<Expr> value;
 };
 
 /// @brief Deferred call executed when the current scope exits.

@@ -16,10 +16,6 @@ class TopLevelParser {
 
     /// @brief Parse the entire translation unit including package and declarations.
     TranslationUnit parseTranslationUnit();
-    /// @brief Parse a consecutive run of declaration annotations.
-    std::vector<Annotation> parseAnnotations();
-    /// @brief Parse one preprocessor directive and append it to the translation unit.
-    bool parsePreprocessorDirective(TranslationUnit& unit);
     /// @brief Parse one top-level declaration from the current token.
     std::unique_ptr<Decl> parseTopLevelDecl();
 
@@ -34,24 +30,23 @@ class DeclarationParser {
     explicit DeclarationParser(Parser& parser);
 
     /// @brief Parse one or more import declarations.
-    std::vector<std::unique_ptr<ImportDecl>> parseImportDecls(std::vector<Annotation> annotations);
+    std::vector<std::unique_ptr<ImportDecl>> parseImportDecls();
     /// @brief Parse a global `let`/`const` declaration.
-    std::unique_ptr<GlobalVarDecl> parseGlobalDecl(std::vector<Annotation> annotations, bool mutableStorage);
+    std::unique_ptr<GlobalVarDecl> parseGlobalDecl(bool mutableStorage);
     /// @brief Parse a function or method declaration.
-    std::unique_ptr<FunctionDecl> parseFunctionDecl(std::vector<Annotation> annotations, bool isExtern, bool isMethod = false,
-                                                    std::string receiverType = {});
+    std::unique_ptr<FunctionDecl> parseFunctionDecl(bool isExtern, bool isMethod = false, std::string receiverType = {});
     /// @brief Parse a struct declaration.
-    std::unique_ptr<StructDecl> parseStructDecl(std::vector<Annotation> annotations);
+    std::unique_ptr<StructDecl> parseStructDecl();
     /// @brief Parse an enum declaration.
-    std::unique_ptr<EnumDecl> parseEnumDecl(std::vector<Annotation> annotations);
+    std::unique_ptr<EnumDecl> parseEnumDecl();
     /// @brief Parse a class declaration.
-    std::unique_ptr<ClassDecl> parseClassDecl(std::vector<Annotation> annotations);
+    std::unique_ptr<ClassDecl> parseClassDecl();
     /// @brief Parse a type spelling.
     Type parseType();
     /// @brief Parse a function parameter.
-    Parameter parseParameter(bool isCompileTime);
-    /// @brief Parse a single return type or parenthesized multi-return list.
-    std::vector<Type> parseReturnTypeList();
+    Parameter parseParameter();
+    /// @brief Parse an optional single return type.
+    std::optional<Type> parseOptionalReturnType();
 
   private:
     Parser& parser_;
@@ -106,8 +101,6 @@ class ExpressionParser {
     std::unique_ptr<Expr> parseExpression();
     /// @brief Parse assignment expressions.
     std::unique_ptr<Expr> parseAssignment();
-    /// @brief Parse pipeline expressions.
-    std::unique_ptr<Expr> parsePipe();
     /// @brief Parse logical-or expressions.
     std::unique_ptr<Expr> parseLogicalOr();
     /// @brief Parse logical-and expressions.
@@ -148,29 +141,6 @@ class ExpressionParser {
 inline bool isComparisonToken(TokenKind kind) {
     return kind == TokenKind::EqualEqual || kind == TokenKind::BangEqual || kind == TokenKind::Less ||
            kind == TokenKind::LessEqual || kind == TokenKind::Greater || kind == TokenKind::GreaterEqual;
-}
-
-/// @brief Returns whether an identifier names an enum flag operation keyword.
-inline bool isEnumOperationIdentifier(const Token& token) {
-    return token.kind == TokenKind::Identifier &&
-           (token.lexeme == "set" || token.lexeme == "unset" || token.lexeme == "toggle" || token.lexeme == "is" || token.lexeme == "isnot");
-}
-
-/// @brief Map textual enum operation names onto AST binary operators.
-inline BinaryOp enumOperationFromLexeme(const std::string& lexeme) {
-    if (lexeme == "set") {
-        return BinaryOp::Set;
-    }
-    if (lexeme == "unset") {
-        return BinaryOp::Unset;
-    }
-    if (lexeme == "toggle") {
-        return BinaryOp::Toggle;
-    }
-    if (lexeme == "is") {
-        return BinaryOp::Is;
-    }
-    return BinaryOp::IsNot;
 }
 
 /// @brief Map comparison tokens onto AST binary operators.
@@ -223,7 +193,7 @@ inline std::optional<BinaryOp> tokenToCompoundBinaryOp(TokenKind kind) {
 
 /// @brief Returns whether a token kind is a builtin scalar type name.
 inline bool isBuiltinTypeName(TokenKind kind) {
-    return kind == TokenKind::KwInt || kind == TokenKind::KwVoid || kind == TokenKind::KwStr || kind == TokenKind::KwError ||
+    return kind == TokenKind::KwInt || kind == TokenKind::KwVoid || kind == TokenKind::KwStr ||
            kind == TokenKind::KwBool || kind == TokenKind::KwI2 || kind == TokenKind::KwI8 || kind == TokenKind::KwI16 ||
            kind == TokenKind::KwI32 || kind == TokenKind::KwI64 || kind == TokenKind::KwU8 || kind == TokenKind::KwU16 ||
            kind == TokenKind::KwU32 || kind == TokenKind::KwU64 || kind == TokenKind::KwShort || kind == TokenKind::KwLong ||
@@ -244,8 +214,6 @@ inline std::unique_ptr<Expr> cloneExpr(const Expr& expr) {
             return std::make_unique<CharLiteralExpr>(static_cast<const CharLiteralExpr&>(expr).value, expr.range);
         case ExprKind::StringLiteral:
             return std::make_unique<StringLiteralExpr>(static_cast<const StringLiteralExpr&>(expr).value, expr.range);
-        case ExprKind::NullLiteral:
-            return std::make_unique<NullLiteralExpr>(expr.range);
         case ExprKind::DeclRef:
             return std::make_unique<DeclRefExpr>(static_cast<const DeclRefExpr&>(expr).name, expr.range);
         case ExprKind::Unary: {
@@ -256,25 +224,17 @@ inline std::unique_ptr<Expr> cloneExpr(const Expr& expr) {
             const auto& binary = static_cast<const BinaryExpr&>(expr);
             return std::make_unique<BinaryExpr>(binary.op, cloneExpr(*binary.lhs), cloneExpr(*binary.rhs), expr.range);
         }
-        case ExprKind::Cast: {
-            const auto& cast = static_cast<const CastExpr&>(expr);
-            return std::make_unique<CastExpr>(cloneExpr(*cast.value), cast.targetType, expr.range);
-        }
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
-            std::vector<std::unique_ptr<Expr>> compileArgs;
-            std::vector<std::unique_ptr<Expr>> runtimeArgs;
-            for (const auto& arg : call.compileArguments) {
-                compileArgs.push_back(cloneExpr(*arg));
+            std::vector<std::unique_ptr<Expr>> args;
+            for (const auto& arg : call.arguments) {
+                args.push_back(cloneExpr(*arg));
             }
-            for (const auto& arg : call.runtimeArguments) {
-                runtimeArgs.push_back(cloneExpr(*arg));
-            }
-            return std::make_unique<CallExpr>(cloneExpr(*call.callee), std::move(compileArgs), std::move(runtimeArgs), call.nullSafe, expr.range);
+            return std::make_unique<CallExpr>(cloneExpr(*call.callee), std::move(args), expr.range);
         }
         case ExprKind::Member: {
             const auto& member = static_cast<const MemberExpr&>(expr);
-            return std::make_unique<MemberExpr>(cloneExpr(*member.base), member.member, member.nullSafe, expr.range);
+            return std::make_unique<MemberExpr>(cloneExpr(*member.base), member.member, expr.range);
         }
         case ExprKind::Initializer: {
             const auto& init = static_cast<const InitializerExpr&>(expr);

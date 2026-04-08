@@ -92,15 +92,6 @@ bool analyzeSource(ParsedFile& file, const std::filesystem::path& path) {
     return true;
 }
 
-bool analyzeAndRunMeta(ParsedFile& file, const std::filesystem::path& path) {
-    if (!analyzeSource(file, path)) {
-        return false;
-    }
-    MetaPipeline meta(file.sourceManager, file.diagnostics);
-    meta.run(file.unit);
-    return true;
-}
-
 std::string renderDiagnostics(const DiagnosticEngine& diagnostics) {
     std::ostringstream out;
     diagnostics.renderAll(out);

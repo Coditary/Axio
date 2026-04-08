@@ -16,8 +16,8 @@ void ASTPrinter::printStmt(const Stmt& stmt, int level) const {
         case StmtKind::Return: {
             out_ << "Return\n";
             const auto& ret = static_cast<const ReturnStmt&>(stmt);
-            for (const auto& value : ret.values) {
-                printExpr(*value, level + 1);
+            if (ret.value) {
+                printExpr(*ret.value, level + 1);
             }
             break;
         }
@@ -133,9 +133,6 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
         case ExprKind::StringLiteral:
             out_ << "String\n";
             break;
-        case ExprKind::NullLiteral:
-            out_ << "Null\n";
-            break;
         case ExprKind::DeclRef:
             out_ << "Ref " << static_cast<const DeclRefExpr&>(expr).name << '\n';
             break;
@@ -148,19 +145,10 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
             printExpr(*static_cast<const BinaryExpr&>(expr).lhs, level + 1);
             printExpr(*static_cast<const BinaryExpr&>(expr).rhs, level + 1);
             break;
-        case ExprKind::Cast:
-            out_ << "Cast ";
-            printType(static_cast<const CastExpr&>(expr).targetType);
-            out_ << '\n';
-            printExpr(*static_cast<const CastExpr&>(expr).value, level + 1);
-            break;
         case ExprKind::Call:
             out_ << "Call\n";
             printExpr(*static_cast<const CallExpr&>(expr).callee, level + 1);
-            for (const auto& argument : static_cast<const CallExpr&>(expr).compileArguments) {
-                printExpr(*argument, level + 1);
-            }
-            for (const auto& argument : static_cast<const CallExpr&>(expr).runtimeArguments) {
+            for (const auto& argument : static_cast<const CallExpr&>(expr).arguments) {
                 printExpr(*argument, level + 1);
             }
             break;
@@ -172,15 +160,6 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
             out_ << "Init " << static_cast<const InitializerExpr&>(expr).typeName;
             switch (static_cast<const InitializerExpr&>(expr).initKind) {
                 case InitKind::Value:
-                    break;
-                case InitKind::Arc:
-                    out_ << " arc";
-                    break;
-                case InitKind::Weak:
-                    out_ << " weak";
-                    break;
-                case InitKind::Unique:
-                    out_ << " unique";
                     break;
                 case InitKind::ArrayLiteral:
                     out_ << " array";

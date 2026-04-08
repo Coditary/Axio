@@ -8,7 +8,6 @@
 #include "../Module/ModuleLoader.h"
 #include "axc/AST/ASTPrinter.h"
 #include "axc/Lex/Lexer.h"
-#include "axc/Meta/MetaPipeline.h"
 #include "axc/Parse/Parser.h"
 #include "axc/Sema/Sema.h"
 #include "axc/Support/Diagnostic.h"
@@ -85,9 +84,6 @@ bool CompilerWorkflow::runFrontEnd(TranslationUnit& unit, SourceManager& sourceM
 
     Sema sema(diagnostics);
     sema.analyze(unit);
-
-    MetaPipeline meta(sourceManager, diagnostics);
-    meta.run(unit);
 
     return !diagnostics.hasErrors();
 }

@@ -17,27 +17,6 @@ enum class Visibility {
     Public,
 };
 
-/// @brief Parsed annotation attached to a declaration.
-struct Annotation {
-    std::string name {};
-    std::vector<std::string> arguments {};
-    SourceRange range {};
-};
-
-/// @brief Parsed preprocessor directive preserved in the translation unit.
-struct PreprocessorDirective {
-    std::string name {};
-    std::vector<std::string> arguments {};
-    SourceRange range {};
-};
-
-/// @brief Ownership/storage modifiers that can decorate a type spelling.
-enum class TypeModifier {
-    Ref,
-    Weak,
-    Unique,
-};
-
 /// @brief Surface-language type spelling captured in the AST.
 ///
 /// This structure stores the unresolved type name and syntactic modifiers as
@@ -45,35 +24,24 @@ enum class TypeModifier {
 /// semantic types and LLVM storage types.
 struct Type {
     std::string name {};
-    std::vector<TypeModifier> modifiers {};
     std::size_t pointerDepth = 0;
     std::vector<std::optional<std::size_t>> arrayExtents {};
     SourceRange range {};
 
     /// @brief Returns whether this is the unqualified `void` type.
-    [[nodiscard]] bool isVoid() const { return name == "void" && pointerDepth == 0 && modifiers.empty() && arrayExtents.empty(); }
+    [[nodiscard]] bool isVoid() const { return name == "void" && pointerDepth == 0 && arrayExtents.empty(); }
     /// @brief Returns whether this is the unqualified `int` type.
-    [[nodiscard]] bool isInt() const { return name == "int" && pointerDepth == 0 && modifiers.empty() && arrayExtents.empty(); }
+    [[nodiscard]] bool isInt() const { return name == "int" && pointerDepth == 0 && arrayExtents.empty(); }
     /// @brief Returns whether this is the unqualified `str` type.
-    [[nodiscard]] bool isString() const { return name == "str" && pointerDepth == 0 && modifiers.empty() && arrayExtents.empty(); }
+    [[nodiscard]] bool isString() const { return name == "str" && pointerDepth == 0 && arrayExtents.empty(); }
     /// @brief Returns whether this is the unqualified `bool` type.
-    [[nodiscard]] bool isBool() const { return name == "bool" && pointerDepth == 0 && modifiers.empty() && arrayExtents.empty(); }
+    [[nodiscard]] bool isBool() const { return name == "bool" && pointerDepth == 0 && arrayExtents.empty(); }
 };
 
-/// @brief Distinguishes initializer/storage forms such as ARC, weak, or unique.
+/// @brief Distinguishes initializer/storage forms supported by the MVP.
 enum class InitKind {
     Value,
-    Arc,
-    Weak,
-    Unique,
     ArrayLiteral,
-};
-
-/// @brief Compile-time parameter declaration used in brace-call syntax.
-struct CompileArg {
-    std::string name {};
-    Type type {};
-    SourceRange range {};
 };
 
 }  // namespace axc

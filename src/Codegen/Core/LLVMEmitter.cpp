@@ -54,6 +54,12 @@ bool emitObjectFile(llvm::Module& module, const std::filesystem::path& objectPat
     auto targetMachine = std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(triple, "generic", "", options, std::nullopt));
     module.setDataLayout(targetMachine->createDataLayout());
 
+    std::error_code directoryEc;
+    const std::filesystem::path parent = objectPath.parent_path();
+    if (!parent.empty()) {
+        std::filesystem::create_directories(parent, directoryEc);
+    }
+
     std::error_code ec;
     llvm::raw_fd_ostream dest(objectPath.string(), ec, llvm::sys::fs::OF_None);
     if (ec) {
@@ -85,6 +91,11 @@ bool LLVMEmitter::emit(const TranslationUnit& translationUnit, const EmitOptions
     const SourceRange syntheticRange {SourceLocation {0}, SourceLocation {0}};
 
     if (!options.llvmIrOutput.empty()) {
+        std::error_code mkdirEc;
+        const std::filesystem::path parent = options.llvmIrOutput.parent_path();
+        if (!parent.empty()) {
+            std::filesystem::create_directories(parent, mkdirEc);
+        }
         std::error_code ec;
         llvm::raw_fd_ostream out(options.llvmIrOutput.string(), ec, llvm::sys::fs::OF_Text);
         if (ec) {

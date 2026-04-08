@@ -14,14 +14,6 @@ TranslationUnit Parser::parseTranslationUnit() {
     return detail::TopLevelParser(*this).parseTranslationUnit();
 }
 
-std::vector<Annotation> Parser::parseAnnotations() {
-    return detail::TopLevelParser(*this).parseAnnotations();
-}
-
-bool Parser::parsePreprocessorDirective(TranslationUnit& unit) {
-    return detail::TopLevelParser(*this).parsePreprocessorDirective(unit);
-}
-
 std::unique_ptr<Decl> Parser::parseTopLevelDecl() {
     return detail::TopLevelParser(*this).parseTopLevelDecl();
 }
@@ -59,10 +51,6 @@ TranslationUnit TopLevelParser::parseTranslationUnit() {
             break;
         }
 
-        if (parsePreprocessorDirective(unit)) {
-            continue;
-        }
-
         if (auto declaration = parseTopLevelDecl()) {
             unit.declarations.push_back(std::move(declaration));
         } else {
@@ -72,66 +60,6 @@ TranslationUnit TopLevelParser::parseTranslationUnit() {
 
     return unit;
 }
-
-std::vector<Annotation> TopLevelParser::parseAnnotations() {
-    std::vector<Annotation> annotations;
-
-    while (parser_.match(TokenKind::At)) {
-        const SourceRange start = parser_.previous().range;
-        if (!parser_.expect(TokenKind::Identifier, "expected annotation name after '@'")) {
-            break;
-        }
-
-        Annotation annotation;
-        annotation.name = parser_.previous().lexeme;
-        annotation.range = parser_.combine(start, parser_.previous().range);
-
-        if (parser_.match(TokenKind::LParen)) {
-            if (!parser_.check(TokenKind::RParen)) {
-                do {
-                    if (!(parser_.check(TokenKind::Identifier) || parser_.check(TokenKind::StringLiteral) || parser_.check(TokenKind::IntegerLiteral))) {
-                        parser_.diagnostics_.error(parser_.current().range, "expected annotation argument");
-                        break;
-                    }
-                    annotation.arguments.push_back(parser_.advance().lexeme);
-                    annotation.range = parser_.combine(annotation.range, parser_.previous().range);
-                } while (parser_.match(TokenKind::Comma));
-            }
-            parser_.expect(TokenKind::RParen, "expected ')' after annotation arguments");
-            annotation.range = parser_.combine(annotation.range, parser_.previous().range);
-        }
-
-        annotations.push_back(std::move(annotation));
-        parser_.skipSeparators();
-    }
-
-    return annotations;
-}
-
-bool TopLevelParser::parsePreprocessorDirective(TranslationUnit& unit) {
-    if (!parser_.match(TokenKind::Hash)) {
-        return false;
-    }
-
-    const SourceRange start = parser_.previous().range;
-    if (!parser_.expect(TokenKind::Identifier, "expected preprocessor directive after '#'")) {
-        return true;
-    }
-
-    PreprocessorDirective directive;
-    directive.name = parser_.previous().lexeme;
-    directive.range = parser_.combine(start, parser_.previous().range);
-
-    while (!parser_.check(TokenKind::EndOfFile) && !parser_.isSeparator(parser_.current())) {
-        directive.arguments.push_back(parser_.advance().lexeme);
-        directive.range = parser_.combine(directive.range, parser_.previous().range);
-    }
-
-    unit.preprocessorDirectives.push_back(std::move(directive));
-    parser_.skipSeparators();
-    return true;
-}
-
 std::unique_ptr<Decl> TopLevelParser::parseTopLevelDecl() {
     if (!parser_.pendingTopLevelDecls_.empty()) {
         auto declaration = std::move(parser_.pendingTopLevelDecls_.front());
@@ -140,9 +68,9 @@ std::unique_ptr<Decl> TopLevelParser::parseTopLevelDecl() {
     }
 
     parser_.skipSeparators();
-    std::vector<Annotation> annotations = parseAnnotations();
-    parser_.skipSeparators();
     const bool isPublic = parser_.match(TokenKind::KwPub);
+    const bool isPrivate = !isPublic && parser_.match(TokenKind::KwPri);
+    (void)isPrivate;
     parser_.skipSeparators();
     const bool isExtern = parser_.match(TokenKind::KwExtern);
     parser_.skipSeparators();
@@ -155,7 +83,7 @@ std::unique_ptr<Decl> TopLevelParser::parseTopLevelDecl() {
         return declaration;
     };
     if (parser_.check(TokenKind::KwImport)) {
-        auto declarations = declarationParser.parseImportDecls(std::move(annotations));
+        auto declarations = declarationParser.parseImportDecls();
         for (auto& declaration : declarations) {
             if (declaration) {
                 declaration->visibility = isPublic ? Visibility::Public : Visibility::Private;
@@ -170,22 +98,22 @@ std::unique_ptr<Decl> TopLevelParser::parseTopLevelDecl() {
         return declaration;
     }
     if (parser_.check(TokenKind::KwLet)) {
-        return applyVisibility(declarationParser.parseGlobalDecl(std::move(annotations), true));
+        return applyVisibility(declarationParser.parseGlobalDecl(true));
     }
     if (parser_.check(TokenKind::KwConst)) {
-        return applyVisibility(declarationParser.parseGlobalDecl(std::move(annotations), false));
+        return applyVisibility(declarationParser.parseGlobalDecl(false));
     }
     if (parser_.check(TokenKind::KwFn)) {
-        return applyVisibility(declarationParser.parseFunctionDecl(std::move(annotations), isExtern));
+        return applyVisibility(declarationParser.parseFunctionDecl(isExtern));
     }
     if (parser_.check(TokenKind::KwStruct)) {
-        return applyVisibility(declarationParser.parseStructDecl(std::move(annotations)));
+        return applyVisibility(declarationParser.parseStructDecl());
     }
     if (parser_.check(TokenKind::KwEnum)) {
-        return applyVisibility(declarationParser.parseEnumDecl(std::move(annotations)));
+        return applyVisibility(declarationParser.parseEnumDecl());
     }
     if (parser_.check(TokenKind::KwClass)) {
-        return applyVisibility(declarationParser.parseClassDecl(std::move(annotations)));
+        return applyVisibility(declarationParser.parseClassDecl());
     }
 
     parser_.diagnostics_.error(parser_.current().range, "expected top-level declaration");
@@ -195,34 +123,11 @@ std::unique_ptr<Decl> TopLevelParser::parseTopLevelDecl() {
 }  // namespace detail
 
 bool Parser::isTypeStart(const Token& token) const {
-    return token.kind == TokenKind::Identifier || detail::isBuiltinTypeName(token.kind) || token.kind == TokenKind::KwRef ||
-           token.kind == TokenKind::KwWeak || token.kind == TokenKind::Star;
+    return token.kind == TokenKind::Identifier || detail::isBuiltinTypeName(token.kind);
 }
 
 bool Parser::isSeparator(const Token& token) const {
     return token.kind == TokenKind::Semicolon || token.kind == TokenKind::Newline;
-}
-
-bool Parser::isCompileArgCallStart() const {
-    if (!check(TokenKind::LBrace)) {
-        return false;
-    }
-
-    int depth = 0;
-    std::size_t probe = index_;
-    while (probe < tokens_.size()) {
-        const TokenKind kind = tokens_[probe].kind;
-        if (kind == TokenKind::LBrace) {
-            ++depth;
-        } else if (kind == TokenKind::RBrace) {
-            --depth;
-            if (depth == 0) {
-                return probe + 1 < tokens_.size() && tokens_[probe + 1].kind == TokenKind::LParen;
-            }
-        }
-        ++probe;
-    }
-    return false;
 }
 
 void Parser::skipSeparators() {
@@ -253,28 +158,6 @@ bool Parser::matchIdentifier(std::string_view lexeme) {
     return true;
 }
 
-bool Parser::matchRangeOperator(SourceRange* range, bool* inclusive) {
-    if (!checkRangeOperator()) {
-        return false;
-    }
-
-    const SourceRange start = advance().range;
-    SourceRange end = advance().range;
-    bool sawInclusive = false;
-    if (check(TokenKind::Equal)) {
-        end = advance().range;
-        sawInclusive = true;
-    }
-
-    if (range != nullptr) {
-        *range = combine(start, end);
-    }
-    if (inclusive != nullptr) {
-        *inclusive = sawInclusive;
-    }
-    return true;
-}
-
 bool Parser::check(TokenKind kind) const {
     return current().kind == kind;
 }
@@ -286,10 +169,6 @@ bool Parser::checkNext(TokenKind kind, std::size_t lookahead) const {
 
 bool Parser::checkIdentifier(std::string_view lexeme) const {
     return current().kind == TokenKind::Identifier && current().lexeme == lexeme;
-}
-
-bool Parser::checkRangeOperator() const {
-    return check(TokenKind::Dot) && checkNext(TokenKind::Dot);
 }
 
 const Token& Parser::advance() {
@@ -323,7 +202,7 @@ void Parser::synchronizeTopLevel() {
             return;
         }
         if (check(TokenKind::KwFn) || check(TokenKind::KwStruct) || check(TokenKind::KwEnum) || check(TokenKind::KwClass) ||
-            check(TokenKind::KwLet) || check(TokenKind::KwConst) || check(TokenKind::KwPub) || check(TokenKind::KwPackage) || check(TokenKind::At) || check(TokenKind::Hash)) {
+            check(TokenKind::KwLet) || check(TokenKind::KwConst) || check(TokenKind::KwPub) || check(TokenKind::KwPri) || check(TokenKind::KwPackage)) {
             return;
         }
         advance();

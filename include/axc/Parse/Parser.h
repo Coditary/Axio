@@ -35,15 +35,13 @@ class Parser {
     friend class detail::StatementParser;
     friend class detail::ExpressionParser;
 
-    std::vector<Annotation> parseAnnotations();
-    bool parsePreprocessorDirective(TranslationUnit& unit);
     std::unique_ptr<Decl> parseTopLevelDecl();
-    std::vector<std::unique_ptr<ImportDecl>> parseImportDecls(std::vector<Annotation> annotations);
-    std::unique_ptr<GlobalVarDecl> parseGlobalDecl(std::vector<Annotation> annotations, bool mutableStorage);
-    std::unique_ptr<FunctionDecl> parseFunctionDecl(std::vector<Annotation> annotations, bool isExtern, bool isMethod = false, std::string receiverType = {});
-    std::unique_ptr<StructDecl> parseStructDecl(std::vector<Annotation> annotations);
-    std::unique_ptr<EnumDecl> parseEnumDecl(std::vector<Annotation> annotations);
-    std::unique_ptr<ClassDecl> parseClassDecl(std::vector<Annotation> annotations);
+    std::vector<std::unique_ptr<ImportDecl>> parseImportDecls();
+    std::unique_ptr<GlobalVarDecl> parseGlobalDecl(bool mutableStorage);
+    std::unique_ptr<FunctionDecl> parseFunctionDecl(bool isExtern, bool isMethod = false, std::string receiverType = {});
+    std::unique_ptr<StructDecl> parseStructDecl();
+    std::unique_ptr<EnumDecl> parseEnumDecl();
+    std::unique_ptr<ClassDecl> parseClassDecl();
 
     std::unique_ptr<CompoundStmt> parseCompoundStmt();
     std::unique_ptr<Stmt> parseStatement();
@@ -61,12 +59,11 @@ class Parser {
     LetBinding parseLetBinding();
 
     Type parseType();
-    Parameter parseParameter(bool isCompileTime);
-    std::vector<Type> parseReturnTypeList();
+    Parameter parseParameter();
+    std::optional<Type> parseOptionalReturnType();
 
     std::unique_ptr<Expr> parseExpression();
     std::unique_ptr<Expr> parseAssignment();
-    std::unique_ptr<Expr> parsePipe();
     std::unique_ptr<Expr> parseLogicalOr();
     std::unique_ptr<Expr> parseLogicalAnd();
     std::unique_ptr<Expr> parseComparisonChain();
@@ -85,16 +82,13 @@ class Parser {
 
     bool isTypeStart(const Token& token) const;
     bool isSeparator(const Token& token) const;
-    bool isCompileArgCallStart() const;
     void skipSeparators();
     void consumeOptionalStatementTerminator();
     bool match(TokenKind kind);
     bool matchIdentifier(std::string_view lexeme);
-    bool matchRangeOperator(SourceRange* range = nullptr, bool* inclusive = nullptr);
     bool check(TokenKind kind) const;
     bool checkNext(TokenKind kind, std::size_t lookahead = 1) const;
     bool checkIdentifier(std::string_view lexeme) const;
-    bool checkRangeOperator() const;
     const Token& advance();
     const Token& current() const;
     const Token& previous() const;

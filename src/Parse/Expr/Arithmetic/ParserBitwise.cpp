@@ -26,13 +26,6 @@ std::unique_ptr<Expr> ExpressionParser::parseBitwiseOr() {
         expr = std::make_unique<BinaryExpr>(BinaryOp::BitOr, std::move(expr), std::move(rhs), parser_.combine(lhsRange, rhs->range));
     }
 
-    while (detail::isEnumOperationIdentifier(parser_.current())) {
-        const BinaryOp op = detail::enumOperationFromLexeme(parser_.advance().lexeme);
-        const SourceRange lhsRange = expr->range;
-        auto rhs = parseBitwiseXor();
-        expr = std::make_unique<BinaryExpr>(op, std::move(expr), std::move(rhs), parser_.combine(lhsRange, rhs->range));
-    }
-
     return expr;
 }
 

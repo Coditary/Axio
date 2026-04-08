@@ -45,16 +45,6 @@ std::unique_ptr<Expr> ExpressionParser::parseUnary() {
     }
     if (parser_.match(TokenKind::Star)) {
         const SourceRange opRange = parser_.previous().range;
-        if (parser_.check(TokenKind::Identifier) && parser_.index_ + 1 < parser_.tokens_.size() &&
-            parser_.tokens_[parser_.index_ + 1].kind == TokenKind::LParen && !parser_.current().lexeme.empty() &&
-            std::isupper(static_cast<unsigned char>(parser_.current().lexeme.front()))) {
-            parser_.advance();
-            const std::string typeName = parser_.previous().lexeme;
-            parser_.expect(TokenKind::LParen, "expected '(' after type name");
-            auto args = parseArgumentList(TokenKind::RParen);
-            parser_.expect(TokenKind::RParen, "expected ')' after initializer arguments");
-            return std::make_unique<InitializerExpr>(typeName, std::move(args), InitKind::Unique, parser_.combine(opRange, parser_.previous().range));
-        }
         auto operand = parseUnary();
         return std::make_unique<UnaryExpr>(UnaryOp::Dereference, std::move(operand), parser_.combine(opRange, operand->range));
     }

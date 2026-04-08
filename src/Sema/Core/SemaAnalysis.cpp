@@ -1,67 +1,88 @@
 #include "../Internal/SemaInternal.h"
 
-#include "axc/Support/QualifiedName.h"
 #include "axc/Support/Diagnostic.h"
+#include "axc/Support/QualifiedName.h"
 
 namespace axc {
+
+namespace {
+
+std::string loweredFunctionName(const FunctionDecl& fn) {
+    return fn.receiverType.empty() ? fn.name : fn.receiverType + "." + fn.name;
+}
+
+bool sameType(const Type& lhs, const Type& rhs) {
+    return lhs.name == rhs.name && lhs.pointerDepth == rhs.pointerDepth && lhs.arrayExtents == rhs.arrayExtents;
+}
+
+bool isIntegerScalarName(const std::string& name) {
+    return name == "int" || name == "i2" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
+           name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "char";
+}
+
+bool isFloatingScalarName(const std::string& name) {
+    return name == "float" || name == "f16" || name == "f32" || name == "double" || name == "f64";
+}
+
+}  // namespace
 
 SemaImpl::SemaImpl(DiagnosticEngine& diagnostics) : diagnostics_(diagnostics) {}
 
 bool SemaImpl::analyze(TranslationUnit& translationUnit) {
+    enumInfos_.clear();
+    classInfos_.clear();
     globalSymbols_.clear();
     globalSymbolTypes_.clear();
+    symbols_.clear();
+    symbolTypes_.clear();
+    structFields_.clear();
+    structFieldTypes_.clear();
+    functionArgumentCount_.clear();
+    functionReturnTypes_.clear();
+
     buildEnumTables(translationUnit);
     buildClassTables(translationUnit);
     recordFunctionSignatures(translationUnit);
+
     for (const auto& decl : translationUnit.declarations) {
         validateDecl(*decl);
     }
+
     return !diagnostics_.hasErrors();
 }
 
 ValueInfo::Ownership SemaImpl::ownershipFromType(const Type& type) const {
-    for (TypeModifier modifier : type.modifiers) {
-        if (modifier == TypeModifier::Ref) {
-            return ValueInfo::Ownership::Ref;
-        }
-        if (modifier == TypeModifier::Weak) {
-            return ValueInfo::Ownership::Weak;
-        }
-        if (modifier == TypeModifier::Unique) {
-            return ValueInfo::Ownership::Unique;
-        }
-    }
-    if (classInfos_.contains(type.name)) {
-        return ValueInfo::Ownership::Arc;
-    }
+    (void)type;
     return ValueInfo::Ownership::Value;
 }
 
-ValueInfo::Ownership SemaImpl::ownershipFromInitKind(InitKind kind) const {
-    switch (kind) {
-        case InitKind::Value:
-            return ValueInfo::Ownership::Value;
-        case InitKind::Arc:
-            return ValueInfo::Ownership::Arc;
-        case InitKind::Weak:
-            return ValueInfo::Ownership::Weak;
-        case InitKind::Unique:
-            return ValueInfo::Ownership::Unique;
-        case InitKind::ArrayLiteral:
-            return ValueInfo::Ownership::Value;
-    }
-    return ValueInfo::Ownership::Unknown;
-}
-
 bool SemaImpl::isPointerLike(const Type& type) const {
-    return type.pointerDepth > 0 || type.name == "str" || classInfos_.contains(type.name);
+    return type.pointerDepth > 0 || type.name == "str" || !type.arrayExtents.empty();
 }
 
-bool SemaImpl::typeSupportsNullability(const Type& type) const {
-    return isPointerLike(type) || ownershipFromType(type) != ValueInfo::Ownership::Value;
+bool SemaImpl::isAssignableType(const Type& target, const Type& actual) const {
+    if (sameType(target, actual)) {
+        return true;
+    }
+
+    if (target.pointerDepth != actual.pointerDepth || target.arrayExtents != actual.arrayExtents) {
+        return false;
+    }
+
+    if (target.name == "bool" && (actual.name == "bool" || isIntegerScalarName(actual.name))) {
+        return true;
+    }
+    if (isIntegerScalarName(target.name) && (isIntegerScalarName(actual.name) || actual.name == "bool")) {
+        return true;
+    }
+    if (isFloatingScalarName(target.name) && (isFloatingScalarName(actual.name) || isIntegerScalarName(actual.name) || actual.name == "bool")) {
+        return true;
+    }
+
+    return false;
 }
 
-std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex) const {
+std::optional<Type> SemaImpl::exprType(const Expr& expr) const {
     switch (expr.kind) {
         case ExprKind::DeclRef: {
             const auto& ref = static_cast<const DeclRefExpr&>(expr);
@@ -69,13 +90,15 @@ std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex)
             if (it != symbolTypes_.end()) {
                 return it->second;
             }
-            break;
-        }
-        case ExprKind::NullLiteral: {
-            Type type;
-            type.name = "null";
-            type.range = expr.range;
-            return type;
+            for (const auto& [enumName, info] : enumInfos_) {
+                if (info.values.contains(ref.name)) {
+                    Type type;
+                    type.name = enumName;
+                    type.range = expr.range;
+                    return type;
+                }
+            }
+            return std::nullopt;
         }
         case ExprKind::StringLiteral: {
             Type type;
@@ -97,7 +120,7 @@ std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex)
         }
         case ExprKind::FloatLiteral: {
             Type type;
-            type.name = "f64";
+            type.name = "double";
             type.range = expr.range;
             return type;
         }
@@ -125,16 +148,13 @@ std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex)
                 type.name = init.typeName;
             }
             type.range = expr.range;
-            if (classInfos_.contains(init.typeName) || (init.initKind != InitKind::Value && init.initKind != InitKind::ArrayLiteral)) {
-                ++type.pointerDepth;
-            }
             return type;
         }
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             if (call.callee->kind == ExprKind::DeclRef) {
                 const auto& callee = static_cast<const DeclRefExpr&>(*call.callee);
-                if (callee.name == "len" && call.runtimeArguments.size() == 1) {
+                if (callee.name == "len" && call.arguments.size() == 1) {
                     Type type;
                     type.name = "int";
                     type.range = expr.range;
@@ -143,57 +163,102 @@ std::optional<Type> SemaImpl::exprType(const Expr& expr, std::size_t valueIndex)
             }
             if (auto calleeName = moduleQualifiedName(*call.callee); calleeName.has_value()) {
                 auto it = functionReturnTypes_.find(*calleeName);
-                if (it != functionReturnTypes_.end() && valueIndex < it->second.size()) {
-                    return it->second[valueIndex];
+                if (it != functionReturnTypes_.end()) {
+                    return it->second;
                 }
             }
-            break;
+            if (call.callee->kind == ExprKind::Member) {
+                const auto& member = static_cast<const MemberExpr&>(*call.callee);
+                if (auto baseType = exprType(*member.base); baseType.has_value()) {
+                    auto it = functionReturnTypes_.find(baseType->name + "." + member.member);
+                    if (it != functionReturnTypes_.end()) {
+                        return it->second;
+                    }
+                }
+            }
+            return std::nullopt;
         }
         case ExprKind::Unary: {
             const auto& unary = static_cast<const UnaryExpr&>(expr);
-            if (unary.op == UnaryOp::IsNonNull) {
-                Type type;
-                type.name = "bool";
-                type.range = expr.range;
-                return type;
-            }
-            if (unary.op == UnaryOp::PreIncrement || unary.op == UnaryOp::PreDecrement || unary.op == UnaryOp::PostIncrement ||
-                unary.op == UnaryOp::PostDecrement) {
-                auto operandType = exprType(*unary.operand);
-                if (operandType.has_value()) {
-                    operandType->range = expr.range;
-                    return operandType;
-                }
-                break;
-            }
             auto operandType = exprType(*unary.operand);
             if (!operandType.has_value()) {
-                break;
+                return std::nullopt;
             }
-            if (unary.op == UnaryOp::AddressOf) {
-                ++operandType->pointerDepth;
-                operandType->range = expr.range;
-                return operandType;
+            switch (unary.op) {
+                case UnaryOp::AddressOf:
+                    ++operandType->pointerDepth;
+                    operandType->range = expr.range;
+                    return operandType;
+                case UnaryOp::Dereference:
+                    if (operandType->pointerDepth > 0) {
+                        --operandType->pointerDepth;
+                    }
+                    operandType->range = expr.range;
+                    return operandType;
+                default:
+                    operandType->range = expr.range;
+                    return operandType;
             }
-            if (unary.op == UnaryOp::Dereference) {
-                if (operandType->pointerDepth > 0) {
-                    --operandType->pointerDepth;
-                } else if (!operandType->modifiers.empty()) {
-                    operandType->modifiers.erase(operandType->modifiers.begin());
+        }
+        case ExprKind::Binary: {
+            const auto& binary = static_cast<const BinaryExpr&>(expr);
+            if (binary.op == BinaryOp::Assign) {
+                return exprType(*binary.lhs);
+            }
+            switch (binary.op) {
+                case BinaryOp::Equal:
+                case BinaryOp::NotEqual:
+                case BinaryOp::Less:
+                case BinaryOp::LessEqual:
+                case BinaryOp::Greater:
+                case BinaryOp::GreaterEqual:
+                case BinaryOp::LogicalAnd:
+                case BinaryOp::LogicalOr: {
+                    Type type;
+                    type.name = "bool";
+                    type.range = expr.range;
+                    return type;
                 }
-                operandType->range = expr.range;
-                return operandType;
+                default:
+                    return exprType(*binary.lhs);
             }
-            break;
         }
-        case ExprKind::Cast: {
-            Type type = static_cast<const CastExpr&>(expr).targetType;
-            type.range = expr.range;
-            return type;
+        case ExprKind::Member: {
+            const auto& member = static_cast<const MemberExpr&>(expr);
+            if (auto baseType = exprType(*member.base); baseType.has_value()) {
+                auto classIt = classInfos_.find(baseType->name);
+                if (classIt != classInfos_.end()) {
+                    auto fieldIt = classIt->second.fieldTypes.find(member.member);
+                    if (fieldIt != classIt->second.fieldTypes.end()) {
+                        return fieldIt->second;
+                    }
+                }
+                auto structIt = structFieldTypes_.find(baseType->name);
+                if (structIt != structFieldTypes_.end()) {
+                    auto fieldIt = structIt->second.find(member.member);
+                    if (fieldIt != structIt->second.end()) {
+                        return fieldIt->second;
+                    }
+                }
+            }
+            if (auto qualifiedName = qualifiedNameFromExpr(expr); qualifiedName.has_value()) {
+                for (const auto& [enumName, info] : enumInfos_) {
+                    const std::string prefix = enumName + ".";
+                    if (qualifiedName->rfind(prefix, 0) == 0) {
+                        const std::string suffix = qualifiedName->substr(prefix.size());
+                        if (info.values.contains(suffix)) {
+                            Type type;
+                            type.name = enumName;
+                            type.range = expr.range;
+                            return type;
+                        }
+                    }
+                }
+            }
+            return std::nullopt;
         }
-        default:
-            break;
     }
+
     return std::nullopt;
 }
 
@@ -202,8 +267,12 @@ std::optional<std::string> SemaImpl::moduleQualifiedName(const Expr& expr) const
     if (!name.has_value()) {
         return std::nullopt;
     }
-    const std::string root = name->substr(0, name->find('.'));
-    if (symbols_.contains(root)) {
+    const std::size_t split = name->find('.');
+    if (split == std::string::npos) {
+        return name;
+    }
+    const std::string root = name->substr(0, split);
+    if (symbols_.contains(root) || globalSymbols_.contains(root)) {
         return std::nullopt;
     }
     return name;
@@ -216,21 +285,13 @@ bool SemaImpl::isKnownDeclRefName(const std::string& name) const {
     if (name == "len") {
         return true;
     }
-    if (symbols_.contains(name) || globalSymbols_.contains(name) || functionReturnCount_.contains(name) || enumInfos_.contains(name) ||
+    if (symbols_.contains(name) || globalSymbols_.contains(name) || functionArgumentCount_.contains(name) || enumInfos_.contains(name) ||
         classInfos_.contains(name) || structFields_.contains(name)) {
         return true;
     }
     for (const auto& [_, info] : enumInfos_) {
         if (info.values.contains(name)) {
             return true;
-        }
-        for (const auto& [variant, params] : info.paramValues) {
-            if (params.contains(name)) {
-                return true;
-            }
-            if (info.values.contains(variant + "." + name)) {
-                return true;
-            }
         }
     }
     return false;
@@ -249,24 +310,21 @@ void SemaImpl::recordFunctionSignatures(TranslationUnit& translationUnit) {
             }
             if (!globalType.name.empty()) {
                 globalSymbolTypes_[global.name] = globalType;
-                globalSymbols_[global.name] = ValueInfo {ownershipFromType(globalType), globalType.name,
-                                                         typeSupportsNullability(globalType), global.mutableStorage};
+                globalSymbols_[global.name] = ValueInfo {ownershipFromType(globalType), globalType.name, global.mutableStorage};
             }
             continue;
         }
+
         if (decl->kind != DeclKind::Function) {
             continue;
         }
+
         const auto& fn = static_cast<const FunctionDecl&>(*decl);
-        std::vector<ValueInfo::Ownership> ownerships;
-        ownerships.reserve(fn.runtimeParameters.size());
-        for (const auto& param : fn.runtimeParameters) {
-            ownerships.push_back(ownershipFromType(param.type));
+        const std::string loweredName = loweredFunctionName(fn);
+        functionArgumentCount_[loweredName] = fn.receiverType.empty() ? fn.parameters.size() : (fn.parameters.empty() ? 0U : fn.parameters.size() - 1U);
+        if (fn.returnType.has_value()) {
+            functionReturnTypes_[loweredName] = *fn.returnType;
         }
-        functionParamOwnership_[fn.name] = std::move(ownerships);
-        functionArgumentCount_[fn.name] = fn.compileParameters.size() + fn.runtimeParameters.size();
-        functionReturnCount_[fn.name] = fn.returnValueCount();
-        functionReturnTypes_[fn.name] = fn.returnTypes;
     }
 }
 
@@ -282,21 +340,13 @@ void SemaImpl::buildClassTables(TranslationUnit& translationUnit) {
             }
             continue;
         }
+
         if (decl->kind != DeclKind::Class) {
             continue;
         }
+
         const auto& classDecl = static_cast<const ClassDecl&>(*decl);
         ClassInfo info;
-        for (const auto& includedStruct : classDecl.includedStructs) {
-            auto structIt = structFields_.find(includedStruct);
-            if (structIt != structFields_.end()) {
-                info.fields.insert(structIt->second.begin(), structIt->second.end());
-            }
-            auto structTypeIt = structFieldTypes_.find(includedStruct);
-            if (structTypeIt != structFieldTypes_.end()) {
-                info.fieldTypes.insert(structTypeIt->second.begin(), structTypeIt->second.end());
-            }
-        }
         for (const auto& member : classDecl.members) {
             info.fields.insert(member.name);
             if (!member.type.name.empty()) {
@@ -305,114 +355,19 @@ void SemaImpl::buildClassTables(TranslationUnit& translationUnit) {
         }
         for (const auto& method : classDecl.methods) {
             info.methods.insert(method->name);
-            std::vector<ValueInfo::Ownership> ownerships;
             const auto& fn = static_cast<const FunctionDecl&>(*method);
-            info.methodArgumentCounts[method->name] = fn.compileParameters.size() + fn.runtimeParameters.size() - (fn.runtimeParameters.empty() ? 0U : 1U);
-            for (const auto& param : fn.runtimeParameters) {
-                ownerships.push_back(ownershipFromType(param.type));
-            }
-            info.methodParamOwnerships[method->name] = std::move(ownerships);
+            info.methodArgumentCounts[method->name] = fn.receiverType.empty() ? fn.parameters.size() : (fn.parameters.empty() ? 0U : fn.parameters.size() - 1U);
         }
         classInfos_[classDecl.name] = std::move(info);
     }
 }
 
 ValueInfo SemaImpl::inferExpr(const Expr& expr) const {
-    switch (expr.kind) {
-        case ExprKind::Initializer: {
-            const auto& init = static_cast<const InitializerExpr&>(expr);
-            const bool isClass = classInfos_.contains(init.typeName);
-            return ValueInfo {
-                isClass && init.initKind == InitKind::Value ? ValueInfo::Ownership::Arc : ownershipFromInitKind(init.initKind),
-                init.typeName,
-                false
-            };
-        }
-        case ExprKind::DeclRef: {
-            const auto& ref = static_cast<const DeclRefExpr&>(expr);
-            auto it = symbols_.find(ref.name);
-            if (it != symbols_.end()) {
-                return it->second;
-            }
-            return ValueInfo {};
-        }
-        case ExprKind::NullLiteral:
-            return ValueInfo {ValueInfo::Ownership::Unknown, "", true};
-        case ExprKind::Call: {
-            const auto& call = static_cast<const CallExpr&>(expr);
-            if (call.callee->kind == ExprKind::DeclRef) {
-                const auto& callee = static_cast<const DeclRefExpr&>(*call.callee);
-                if (callee.name == "len" && call.runtimeArguments.size() == 1) {
-                    return ValueInfo {ValueInfo::Ownership::Value, "int", false};
-                }
-            }
-            if (auto calleeName = moduleQualifiedName(*call.callee); calleeName.has_value()) {
-                auto typeIt = functionReturnTypes_.find(*calleeName);
-                if (typeIt != functionReturnTypes_.end() && !typeIt->second.empty()) {
-                    const Type& returnType = typeIt->second.front();
-                    return ValueInfo {ownershipFromType(returnType), returnType.name, false};
-                }
-                auto sigIt = functionReturnCount_.find(*calleeName);
-                if (sigIt != functionReturnCount_.end()) {
-                    return ValueInfo {ValueInfo::Ownership::Unknown, "", false};
-                }
-            }
-            if (call.callee->kind == ExprKind::Member) {
-                const auto& member = static_cast<const MemberExpr&>(*call.callee);
-                if (auto baseType = exprType(*member.base); baseType.has_value() && classInfos_.contains(baseType->name)) {
-                    const std::string loweredName = baseType->name + "." + member.member;
-                    auto typeIt = functionReturnTypes_.find(loweredName);
-                    if (typeIt != functionReturnTypes_.end() && !typeIt->second.empty()) {
-                        const Type& returnType = typeIt->second.front();
-                        return ValueInfo {ownershipFromType(returnType), returnType.name, false};
-                    }
-                }
-            }
-            return ValueInfo {};
-        }
-        case ExprKind::Unary: {
-            const auto& unary = static_cast<const UnaryExpr&>(expr);
-            if (unary.op == UnaryOp::AddressOf || unary.op == UnaryOp::Dereference) {
-                ValueInfo value = inferExpr(*unary.operand);
-                value.nullable = false;
-                return value;
-            }
-            if (unary.op == UnaryOp::PreIncrement || unary.op == UnaryOp::PreDecrement || unary.op == UnaryOp::PostIncrement ||
-                unary.op == UnaryOp::PostDecrement) {
-                return inferExpr(*unary.operand);
-            }
-            return ValueInfo {};
-        }
-        case ExprKind::Cast: {
-            const auto& cast = static_cast<const CastExpr&>(expr);
-            return ValueInfo {ownershipFromType(cast.targetType), cast.targetType.name, typeSupportsNullability(cast.targetType)};
-        }
-        default:
-            return ValueInfo {};
+    auto type = exprType(expr);
+    if (type.has_value()) {
+        return ValueInfo {ownershipFromType(*type), type->name, true};
     }
-}
-
-std::size_t SemaImpl::exprValueCount(const Expr& expr) const {
-    if (expr.kind == ExprKind::Call) {
-        const auto& call = static_cast<const CallExpr&>(expr);
-        auto calleeName = moduleQualifiedName(*call.callee);
-        if (!calleeName.has_value()) {
-            return 1;
-        }
-        auto it = functionReturnCount_.find(*calleeName);
-        if (it != functionReturnCount_.end()) {
-            return it->second;
-        }
-    }
-    return 1;
-}
-
-std::size_t SemaImpl::flattenedValueCount(const std::vector<std::unique_ptr<Expr>>& values) const {
-    std::size_t count = 0;
-    for (const auto& value : values) {
-        count += exprValueCount(*value);
-    }
-    return count;
+    return ValueInfo {};
 }
 
 bool SemaImpl::containsDeclRef(const Expr& expr, const std::string& name) const {
@@ -425,19 +380,12 @@ bool SemaImpl::containsDeclRef(const Expr& expr, const std::string& name) const 
             const auto& binary = static_cast<const BinaryExpr&>(expr);
             return containsDeclRef(*binary.lhs, name) || containsDeclRef(*binary.rhs, name);
         }
-        case ExprKind::Cast:
-            return containsDeclRef(*static_cast<const CastExpr&>(expr).value, name);
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             if (containsDeclRef(*call.callee, name)) {
                 return true;
             }
-            for (const auto& arg : call.compileArguments) {
-                if (containsDeclRef(*arg, name)) {
-                    return true;
-                }
-            }
-            for (const auto& arg : call.runtimeArguments) {
+            for (const auto& arg : call.arguments) {
                 if (containsDeclRef(*arg, name)) {
                     return true;
                 }
@@ -446,127 +394,37 @@ bool SemaImpl::containsDeclRef(const Expr& expr, const std::string& name) const 
         }
         case ExprKind::Member:
             return containsDeclRef(*static_cast<const MemberExpr&>(expr).base, name);
-        case ExprKind::Initializer: {
+        case ExprKind::Initializer:
             for (const auto& value : static_cast<const InitializerExpr&>(expr).values) {
                 if (containsDeclRef(*value, name)) {
                     return true;
                 }
             }
             return false;
-        }
         default:
             return false;
     }
 }
 
-void SemaImpl::collectRepeatedUniqueUses(const Expr& expr, std::unordered_set<std::string>& seen, const std::string& message) {
-    switch (expr.kind) {
-        case ExprKind::DeclRef: {
-            const auto& ref = static_cast<const DeclRefExpr&>(expr);
-            auto it = symbols_.find(ref.name);
-            if (it != symbols_.end() && it->second.ownership == ValueInfo::Ownership::Unique) {
-                if (!seen.insert(ref.name).second) {
-                    diagnostics_.error(expr.range, message);
-                }
-            }
-            break;
-        }
-        case ExprKind::Unary:
-            collectRepeatedUniqueUses(*static_cast<const UnaryExpr&>(expr).operand, seen, message);
-            break;
-        case ExprKind::Binary: {
-            const auto& binary = static_cast<const BinaryExpr&>(expr);
-            collectRepeatedUniqueUses(*binary.lhs, seen, message);
-            collectRepeatedUniqueUses(*binary.rhs, seen, message);
-            break;
-        }
-        case ExprKind::Cast:
-            collectRepeatedUniqueUses(*static_cast<const CastExpr&>(expr).value, seen, message);
-            break;
-        case ExprKind::Call: {
-            const auto& call = static_cast<const CallExpr&>(expr);
-            collectRepeatedUniqueUses(*call.callee, seen, message);
-            for (const auto& arg : call.compileArguments) {
-                collectRepeatedUniqueUses(*arg, seen, message);
-            }
-            for (const auto& arg : call.runtimeArguments) {
-                collectRepeatedUniqueUses(*arg, seen, message);
-            }
-            break;
-        }
-        case ExprKind::Member:
-            collectRepeatedUniqueUses(*static_cast<const MemberExpr&>(expr).base, seen, message);
-            break;
-        case ExprKind::Initializer: {
-            for (const auto& value : static_cast<const InitializerExpr&>(expr).values) {
-                collectRepeatedUniqueUses(*value, seen, message);
-            }
-            break;
-        }
-        default:
-            break;
-    }
-}
-
 void SemaImpl::requireSingleValue(const Expr& expr, const std::string& message) {
-    if (exprValueCount(expr) > 1) {
-        diagnostics_.error(expr.range, message);
-    }
+    (void)expr;
+    (void)message;
 }
 
 void SemaImpl::buildEnumTables(TranslationUnit& translationUnit) {
-    for (auto& decl : translationUnit.declarations) {
+    for (const auto& decl : translationUnit.declarations) {
         if (decl->kind != DeclKind::Enum) {
             continue;
         }
 
-        auto& enumDecl = static_cast<EnumDecl&>(*decl);
+        const auto& enumDecl = static_cast<const EnumDecl&>(*decl);
         EnumInfo info;
-        info.isFlags = enumDecl.isFlags;
         std::uint64_t nextValue = 0;
-        std::uint64_t nextFlagBit = 0;
-
-        for (auto& element : enumDecl.elements) {
-            std::uint64_t assigned = 0;
-            if (enumDecl.isFlags) {
-                assigned = 1ULL << nextFlagBit++;
-            } else {
-                assigned = nextValue++;
-            }
-            element.constantValue = assigned;
+        for (const auto& element : enumDecl.elements) {
+            const std::uint64_t assigned = nextValue++;
             info.values[element.name] = assigned;
-            if (!enumDecl.isFlags) {
-                info.maxOrdinal = assigned > info.maxOrdinal ? assigned : info.maxOrdinal;
-            }
-
-            if (!enumDecl.parameters.empty() && element.payloadValues.size() == enumDecl.parameters.size()) {
-                for (std::size_t i = 0; i < enumDecl.parameters.size(); ++i) {
-                    const auto value = evalExpr(*element.payloadValues[i]);
-                    if (value.has_value()) {
-                        info.paramValues[element.name][enumDecl.parameters[i].name] = *value;
-                    }
-                }
-            }
-
-            if (!element.nestedDecls.empty()) {
-                std::uint64_t nestedValue = 0;
-                std::uint64_t nestedFlagBit = 0;
-                for (const auto& nestedDecl : element.nestedDecls) {
-                    if (nestedDecl->kind != DeclKind::Enum) {
-                        continue;
-                    }
-                    const auto& nestedEnum = static_cast<const EnumDecl&>(*nestedDecl);
-                    for (const auto& nestedElement : nestedEnum.elements) {
-                        const std::uint64_t nestedAssigned = element.isFlagGroup ? (1ULL << (nextFlagBit + nestedFlagBit++)) : nestedValue++;
-                        info.values[element.name + "." + nestedElement.name] = nestedAssigned;
-                    }
-                }
-                if (element.isFlagGroup) {
-                    nextFlagBit += nestedFlagBit;
-                }
-            }
+            info.maxOrdinal = assigned;
         }
-
         enumInfos_[enumDecl.name] = std::move(info);
     }
 }

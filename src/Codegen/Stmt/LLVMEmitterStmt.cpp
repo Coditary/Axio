@@ -1,77 +1,11 @@
 /// @file
-/// @brief LLVM lowering for statements, structured control flow, switch dispatch, and defer handling.
+/// @brief LLVM lowering for MVP statements and control flow.
 
 #include "../Internal/LLVMEmitterInternal.h"
 
 #include "axc/Support/Diagnostic.h"
 
 namespace axc {
-
-namespace {
-
-bool containsBreakForCurrentSwitch(const Stmt& stmt, std::size_t loopDepth = 0, std::size_t switchDepth = 0) {
-    switch (stmt.kind) {
-        case StmtKind::Compound: {
-            const auto& block = static_cast<const CompoundStmt&>(stmt);
-            for (const auto& child : block.statements) {
-                if (containsBreakForCurrentSwitch(*child, loopDepth, switchDepth)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        case StmtKind::If: {
-            const auto& ifStmt = static_cast<const IfStmt&>(stmt);
-            if (containsBreakForCurrentSwitch(*ifStmt.thenBlock, loopDepth, switchDepth)) {
-                return true;
-            }
-            return ifStmt.elseBranch && containsBreakForCurrentSwitch(*ifStmt.elseBranch, loopDepth, switchDepth);
-        }
-        case StmtKind::While:
-            return containsBreakForCurrentSwitch(*static_cast<const WhileStmt&>(stmt).body, loopDepth + 1, switchDepth);
-        case StmtKind::For:
-            return containsBreakForCurrentSwitch(*static_cast<const ForStmt&>(stmt).body, loopDepth + 1, switchDepth);
-        case StmtKind::DoWhile:
-            return containsBreakForCurrentSwitch(*static_cast<const DoWhileStmt&>(stmt).body, loopDepth + 1, switchDepth);
-        case StmtKind::Switch: {
-            const auto& switchStmt = static_cast<const SwitchStmt&>(stmt);
-            for (const auto& switchCase : switchStmt.cases) {
-                if (switchCase.body && containsBreakForCurrentSwitch(*switchCase.body, loopDepth, switchDepth + 1)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        case StmtKind::Break:
-            return loopDepth == 0 && switchDepth == 0;
-        case StmtKind::Return:
-        case StmtKind::Defer:
-        case StmtKind::Expr:
-        case StmtKind::Let:
-        case StmtKind::Continue:
-            return false;
-    }
-    return false;
-}
-
-std::optional<std::uint64_t> enumNameMaxOrdinal(const std::unordered_map<std::string, EnumValueInfo>& enumValues, const Expr& expr) {
-    auto qualified = qualifiedNameFromExpr(expr);
-    if (!qualified.has_value()) {
-        return std::nullopt;
-    }
-    const std::size_t split = qualified->find('.');
-    if (split == std::string::npos) {
-        return std::nullopt;
-    }
-    const std::string root = qualified->substr(0, split);
-    auto it = enumValues.find(root);
-    if (it == enumValues.end() || it->second.isFlags) {
-        return std::nullopt;
-    }
-    return it->second.maxOrdinal;
-}
-
-}  // namespace
 
 bool ModuleEmitter::emitLoopConditionBranch(const Expr* condition,
                                             llvm::BasicBlock* trueBlock,
@@ -125,6 +59,7 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
         case StmtKind::Compound: {
             const auto& block = static_cast<const CompoundStmt&>(stmt);
             deferScopes_.emplace_back();
+            const auto savedLocals = locals_;
             for (const auto& child : block.statements) {
                 if (!emitStmt(*child, functionDecl)) {
                     if (!deferScopes_.empty()) {
@@ -144,6 +79,7 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                     return false;
                 }
             }
+            locals_ = savedLocals;
             if (!deferScopes_.empty()) {
                 deferScopes_.pop_back();
             }
@@ -151,65 +87,26 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
         }
         case StmtKind::Return: {
             const auto& ret = static_cast<const ReturnStmt&>(stmt);
-            llvm::Type* loweredReturnType = lowerFunctionReturnType(functionDecl);
-            if (loweredReturnType->isVoidTy()) {
+            if (functionDecl.returnsVoid()) {
                 if (!emitDeferredCallsFromDepth(0)) {
                     return false;
                 }
-                releaseLocals();
                 builder_.CreateRetVoid();
                 return true;
             }
-
-            if (ret.values.empty()) {
+            if (!ret.value) {
                 diagnostics_.error(ret.range, "non-void function must return a value");
                 return false;
             }
-
-            std::vector<llvm::Value*> returnedValues;
-            returnedValues.reserve(functionDecl.returnTypes.size());
-            for (const auto& expr : ret.values) {
-                MultiValue values = emitExprValues(*expr);
-                if (values.values.empty()) {
-                    return false;
-                }
-                for (llvm::Value* value : values.values) {
-                    returnedValues.push_back(value);
-                }
+            llvm::Value* value = emitExpr(*ret.value);
+            if (value == nullptr) {
+                return false;
             }
-
-            if (functionDecl.returnTypes.size() <= 1) {
-                llvm::Value* value = castValueToType(returnedValues.front(), functionReturnType(functionDecl));
-                if (value == nullptr) {
-                    return false;
-                }
-                if (value->getType()->isPointerTy()) {
-                    value = retainForStorage(value, functionReturnType(functionDecl));
-                } else if (isArcOwnedType(functionReturnType(functionDecl))) {
-                    diagnostics_.error(ret.range, "ARC-backed class returns must lower to pointer values");
-                    return false;
-                }
-                if (!emitDeferredCallsFromDepth(0)) {
-                    return false;
-                }
-                releaseLocals();
-                builder_.CreateRet(value);
-                return true;
-            }
-
-            llvm::Value* aggregate = llvm::UndefValue::get(loweredReturnType);
-            for (std::size_t i = 0; i < functionDecl.returnTypes.size(); ++i) {
-                llvm::Value* value = castValueToType(returnedValues[i], functionDecl.returnTypes[i]);
-                if (value != nullptr && value->getType()->isPointerTy()) {
-                    value = retainForStorage(value, functionDecl.returnTypes[i]);
-                }
-                aggregate = builder_.CreateInsertValue(aggregate, value, {static_cast<unsigned>(i)}, "ret.insert");
-            }
+            value = castValueToType(value, *functionDecl.returnType);
             if (!emitDeferredCallsFromDepth(0)) {
                 return false;
             }
-            releaseLocals();
-            builder_.CreateRet(aggregate);
+            builder_.CreateRet(value);
             return true;
         }
         case StmtKind::Defer: {
@@ -226,6 +123,11 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
         }
         case StmtKind::Expr: {
             const auto& exprStmt = static_cast<const ExprStmt&>(stmt);
+            if (exprStmt.expression->kind == ExprKind::Call) {
+                const auto& call = static_cast<const CallExpr&>(*exprStmt.expression);
+                llvm::Value* callValue = emitExpr(call);
+                return callValue != nullptr || (call.callee && call.callee->kind == ExprKind::DeclRef && functionDecls_.contains(static_cast<const DeclRefExpr&>(*call.callee).name) && functionDecls_.at(static_cast<const DeclRefExpr&>(*call.callee).name)->returnsVoid());
+            }
             return emitExpr(*exprStmt.expression) != nullptr;
         }
         case StmtKind::Let: {
@@ -237,43 +139,27 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 }
             }
 
-            std::vector<llvm::Value*> initializerValues;
-            if (letStmt.initializer) {
-                MultiValue values = emitExprValues(*letStmt.initializer);
-                if (values.values.empty()) {
-                    return false;
+            const auto& binding = letStmt.bindings.front();
+            Type storageType = !binding.explicitType.name.empty() ? binding.explicitType : inferExprType(*letStmt.initializer);
+            storageType.range = binding.range;
+            if (!binding.explicitType.name.empty() && letStmt.initializer != nullptr && letStmt.initializer->kind == ExprKind::Initializer) {
+                const auto& init = static_cast<const InitializerExpr&>(*letStmt.initializer);
+                if (init.initKind == InitKind::ArrayLiteral && !storageType.arrayExtents.empty() && !storageType.arrayExtents.front().has_value()) {
+                    storageType.arrayExtents.front() = init.values.size();
                 }
-                initializerValues = std::move(values.values);
             }
 
-            for (std::size_t i = 0; i < letStmt.bindings.size(); ++i) {
-                const auto& binding = letStmt.bindings[i];
-                Type storageType = !binding.explicitType.name.empty() ? binding.explicitType : inferExprType(*letStmt.initializer, i);
-                storageType.range = binding.range;
-                if (!binding.explicitType.name.empty() && letStmt.initializer != nullptr && letStmt.initializer->kind == ExprKind::Initializer) {
-                    const auto& init = static_cast<const InitializerExpr&>(*letStmt.initializer);
-                    if (init.initKind == InitKind::ArrayLiteral && !storageType.arrayExtents.empty() && !storageType.arrayExtents.front().has_value()) {
-                        storageType.arrayExtents.front() = init.values.size();
-                    }
-                }
+            llvm::Type* llvmType = lowerType(storageType);
+            llvm::AllocaInst* alloca = createEntryAlloca(currentFunction_, llvmType, binding.name);
+            locals_[binding.name] = Symbol {alloca, storageType};
 
-                if (isArcOwnedType(storageType) && storageType.pointerDepth == 0) {
-                    ++storageType.pointerDepth;
+            if (letStmt.initializer) {
+                llvm::Value* stored = emitExpr(*letStmt.initializer);
+                if (stored == nullptr) {
+                    return false;
                 }
-
-                llvm::Type* llvmType = lowerType(storageType);
-                llvm::AllocaInst* alloca = createEntryAlloca(currentFunction_, llvmType, binding.name);
-                const bool nullable = letStmt.initializer != nullptr && (letStmt.initializer->kind == ExprKind::NullLiteral ||
-                    (letStmt.initializer->kind == ExprKind::Initializer && static_cast<const InitializerExpr&>(*letStmt.initializer).initKind != InitKind::Value));
-                locals_[binding.name] = Symbol {alloca, storageType, nullable};
-
-                if (i < initializerValues.size()) {
-                    llvm::Value* stored = castValueToType(initializerValues[i], storageType);
-                    if (letStmt.initializer != nullptr && shouldRetainForStorage(*letStmt.initializer, storageType)) {
-                        stored = retainForStorage(stored, storageType);
-                    }
-                    builder_.CreateStore(stored, alloca);
-                }
+                stored = castValueToType(stored, storageType);
+                builder_.CreateStore(stored, alloca);
             }
             return true;
         }
@@ -298,12 +184,9 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
             if (!emitStmt(*ifStmt.thenBlock, functionDecl)) {
                 return false;
             }
-            const bool thenTerminated = builder_.GetInsertBlock()->getTerminator() != nullptr;
-            if (!thenTerminated) {
+            if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
                 builder_.CreateBr(mergeBlock);
             }
-
-            bool elseTerminated = false;
 
             if (ifStmt.elseBranch) {
                 function->insert(function->end(), elseBlock);
@@ -311,17 +194,13 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 if (!emitStmt(*ifStmt.elseBranch, functionDecl)) {
                     return false;
                 }
-                elseTerminated = builder_.GetInsertBlock()->getTerminator() != nullptr;
-                if (!elseTerminated) {
+                if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
                     builder_.CreateBr(mergeBlock);
                 }
             }
 
             function->insert(function->end(), mergeBlock);
             builder_.SetInsertPoint(mergeBlock);
-            if (ifStmt.elseBranch && thenTerminated && elseTerminated) {
-                builder_.CreateUnreachable();
-            }
             return true;
         }
         case StmtKind::While: {
@@ -395,7 +274,6 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
 
             branchTargets_.pop_back();
             builder_.SetInsertPoint(endBlock);
-            releaseLocals();
             locals_ = savedLocals;
             return true;
         }
@@ -444,15 +322,10 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
             }
 
             std::vector<std::pair<llvm::ConstantInt*, llvm::BasicBlock*>> exactCases;
-            llvm::BasicBlock* unmatchedBlock = defaultBlock;
-            bool hasExplicitDefault = false;
-
             for (std::size_t i = 0; i < switchStmt.cases.size(); ++i) {
                 const auto& switchCase = switchStmt.cases[i];
                 if (switchCase.isDefault) {
                     defaultBlock = caseBlocks[i];
-                    unmatchedBlock = defaultBlock;
-                    hasExplicitDefault = true;
                     continue;
                 }
                 for (const auto& pattern : switchCase.patterns) {
@@ -471,32 +344,24 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 }
             }
 
-            llvm::SwitchInst* switchInst = builder_.CreateSwitch(matchedValue, unmatchedBlock, exactCases.size());
+            llvm::SwitchInst* switchInst = builder_.CreateSwitch(matchedValue, defaultBlock, exactCases.size());
             for (const auto& [caseValue, block] : exactCases) {
                 switchInst->addCase(caseValue, block);
             }
 
-            const bool exhaustiveWithoutDefault = !hasExplicitDefault && unmatchedBlock == endBlock;
-            bool allCasesTerminated = !switchStmt.cases.empty() && (hasExplicitDefault || exhaustiveWithoutDefault);
             for (std::size_t i = 0; i < switchStmt.cases.size(); ++i) {
                 builder_.SetInsertPoint(caseBlocks[i]);
                 if (switchStmt.cases[i].body && !emitStmt(*switchStmt.cases[i].body, functionDecl)) {
                     branchTargets_.pop_back();
                     return false;
                 }
-                const bool caseTerminated = builder_.GetInsertBlock()->getTerminator() != nullptr;
-                const bool breaksCurrentSwitch = switchStmt.cases[i].body && containsBreakForCurrentSwitch(*switchStmt.cases[i].body);
-                allCasesTerminated = allCasesTerminated && caseTerminated && !breaksCurrentSwitch;
-                if (!caseTerminated) {
+                if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
                     builder_.CreateBr(endBlock);
                 }
             }
 
             branchTargets_.pop_back();
             builder_.SetInsertPoint(endBlock);
-            if (allCasesTerminated) {
-                builder_.CreateUnreachable();
-            }
             return true;
         }
         case StmtKind::Break: {
@@ -564,7 +429,7 @@ bool ModuleEmitter::emitDeferredCall(const DeferredCall& deferred, const Functio
     if (deferred.call == nullptr) {
         return true;
     }
-    emitExprValues(*deferred.call);
+    emitExpr(*deferred.call);
     return !diagnostics_.hasErrors();
 }
 

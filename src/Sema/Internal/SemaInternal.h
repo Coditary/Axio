@@ -15,10 +15,8 @@ class DiagnosticEngine;
 
 /// @brief Semantic enum metadata built during analysis.
 struct EnumInfo {
-    bool isFlags = false;
     std::uint64_t maxOrdinal = 0;
     std::unordered_map<std::string, std::uint64_t> values {};
-    std::unordered_map<std::string, std::unordered_map<std::string, std::uint64_t>> paramValues {};
 };
 
 /// @brief Semantic value properties tracked for symbols.
@@ -26,14 +24,9 @@ struct ValueInfo {
     enum class Ownership {
         Unknown,
         Value,
-        Arc,
-        Weak,
-        Unique,
-        Ref,
     } ownership = Ownership::Unknown;
 
     std::string typeName {};
-    bool nullable = false;
     bool mutableStorage = true;
 };
 
@@ -43,14 +36,13 @@ struct ClassInfo {
     std::unordered_set<std::string> methods {};
     std::unordered_map<std::string, Type> fieldTypes {};
     std::unordered_map<std::string, std::size_t> methodArgumentCounts {};
-    std::unordered_map<std::string, std::vector<ValueInfo::Ownership>> methodParamOwnerships {};
 };
 
 /// @brief Internal semantic-analysis implementation.
 ///
 /// `Sema` is the public facade; `SemaImpl` owns the mutable analysis state and
 /// the helper routines needed for symbol tables, enum metadata, ownership
-/// tracking, nullability checks, and switch exhaustiveness analysis.
+/// tracking and switch exhaustiveness analysis.
 class SemaImpl {
   public:
     /// @brief Create the semantic analyzer implementation.
@@ -62,14 +54,12 @@ class SemaImpl {
   private:
     /// @brief Derive ownership behavior from a parsed type.
     ValueInfo::Ownership ownershipFromType(const Type& type) const;
-    /// @brief Derive ownership behavior from an initializer form.
-    ValueInfo::Ownership ownershipFromInitKind(InitKind kind) const;
     /// @brief Return whether a type is represented through a pointer-like value.
     bool isPointerLike(const Type& type) const;
-    /// @brief Return whether a type may legally carry `null`.
-    bool typeSupportsNullability(const Type& type) const;
+    /// @brief Return whether a value of `actual` can be assigned to `target`.
+    bool isAssignableType(const Type& target, const Type& actual) const;
     /// @brief Compute the semantic type of an expression value.
-    std::optional<Type> exprType(const Expr& expr, std::size_t valueIndex = 0) const;
+    std::optional<Type> exprType(const Expr& expr) const;
     /// @brief Resolve an expression to a module-qualified name when possible.
     std::optional<std::string> moduleQualifiedName(const Expr& expr) const;
     /// @brief Return whether a name is known in the current symbol environment.
@@ -80,14 +70,8 @@ class SemaImpl {
     void buildClassTables(TranslationUnit& translationUnit);
     /// @brief Infer semantic value properties from an expression.
     ValueInfo inferExpr(const Expr& expr) const;
-    /// @brief Count the number of values produced by one expression.
-    std::size_t exprValueCount(const Expr& expr) const;
-    /// @brief Count values produced by a list of expressions after flattening tuples.
-    std::size_t flattenedValueCount(const std::vector<std::unique_ptr<Expr>>& values) const;
     /// @brief Return whether an expression subtree references a given declaration name.
     bool containsDeclRef(const Expr& expr, const std::string& name) const;
-    /// @brief Detect repeated use of a unique value within one expression tree.
-    void collectRepeatedUniqueUses(const Expr& expr, std::unordered_set<std::string>& seen, const std::string& message);
     /// @brief Require that an expression produces exactly one runtime value.
     void requireSingleValue(const Expr& expr, const std::string& message);
     /// @brief Build enum metadata tables used by constant evaluation and switch checks.
@@ -136,16 +120,10 @@ class SemaImpl {
     std::unordered_map<std::string, std::unordered_set<std::string>> structFields_ {};
     /// Known struct field types by struct name.
     std::unordered_map<std::string, std::unordered_map<std::string, Type>> structFieldTypes_ {};
-    /// Unique values already consumed in the current validation context.
-    std::unordered_set<std::string> consumedUnique_ {};
-    /// Function parameter ownership metadata.
-    std::unordered_map<std::string, std::vector<ValueInfo::Ownership>> functionParamOwnership_ {};
     /// Function arity metadata.
     std::unordered_map<std::string, std::size_t> functionArgumentCount_ {};
-    /// Function return-count metadata.
-    std::unordered_map<std::string, std::size_t> functionReturnCount_ {};
     /// Function return-type metadata.
-    std::unordered_map<std::string, std::vector<Type>> functionReturnTypes_ {};
+    std::unordered_map<std::string, Type> functionReturnTypes_ {};
 };
 
 }  // namespace axc
