@@ -10,7 +10,7 @@ namespace axc::detail {
 namespace {
 
 std::string visibilityName(Visibility visibility) {
-    return visibility == Visibility::Public ? "pub" : "priv";
+    return visibility == Visibility::Public ? "pub" : "pri";
 }
 
 }  // namespace
