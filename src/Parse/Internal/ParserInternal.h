@@ -81,8 +81,6 @@ class StatementParser {
     std::unique_ptr<Stmt> parseWhileStmt();
     /// @brief Parse a C-style `for` loop.
     std::unique_ptr<Stmt> parseForStmt();
-    /// @brief Parse a `foreach` loop.
-    std::unique_ptr<Stmt> parseForeachStmt();
     /// @brief Parse a `do-while` loop.
     std::unique_ptr<Stmt> parseDoWhileStmt();
     /// @brief Parse a `switch` statement and its case patterns.
@@ -149,8 +147,7 @@ class ExpressionParser {
 /// @brief Returns whether a token participates in comparison-chain parsing.
 inline bool isComparisonToken(TokenKind kind) {
     return kind == TokenKind::EqualEqual || kind == TokenKind::BangEqual || kind == TokenKind::Less ||
-           kind == TokenKind::LessEqual || kind == TokenKind::Greater || kind == TokenKind::GreaterEqual ||
-           kind == TokenKind::KwIn;
+           kind == TokenKind::LessEqual || kind == TokenKind::Greater || kind == TokenKind::GreaterEqual;
 }
 
 /// @brief Returns whether an identifier names an enum flag operation keyword.
@@ -191,8 +188,6 @@ inline BinaryOp tokenToComparisonOp(TokenKind kind) {
             return BinaryOp::Greater;
         case TokenKind::GreaterEqual:
             return BinaryOp::GreaterEqual;
-        case TokenKind::KwIn:
-            return BinaryOp::InRange;
         default:
             return BinaryOp::Equal;
     }
@@ -265,10 +260,6 @@ inline std::unique_ptr<Expr> cloneExpr(const Expr& expr) {
             const auto& cast = static_cast<const CastExpr&>(expr);
             return std::make_unique<CastExpr>(cloneExpr(*cast.value), cast.targetType, expr.range);
         }
-        case ExprKind::Range: {
-            const auto& range = static_cast<const RangeExpr&>(expr);
-            return std::make_unique<RangeExpr>(cloneExpr(*range.start), cloneExpr(*range.end), range.inclusive, expr.range);
-        }
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             std::vector<std::unique_ptr<Expr>> compileArgs;
@@ -292,18 +283,6 @@ inline std::unique_ptr<Expr> cloneExpr(const Expr& expr) {
                 values.push_back(cloneExpr(*value));
             }
             return std::make_unique<InitializerExpr>(init.typeName, std::move(values), init.initKind, expr.range);
-        }
-        case ExprKind::CompileCall: {
-            const auto& call = static_cast<const CompileCallExpr&>(expr);
-            std::vector<std::unique_ptr<Expr>> args;
-            for (const auto& arg : call.arguments) {
-                args.push_back(cloneExpr(*arg));
-            }
-            return std::make_unique<CompileCallExpr>(call.callee, std::move(args), expr.range);
-        }
-        case ExprKind::Dialect: {
-            const auto& dialect = static_cast<const DialectExpr&>(expr);
-            return std::make_unique<DialectExpr>(dialect.dialectName, dialect.content, expr.range);
         }
     }
     return std::make_unique<IntegerLiteralExpr>(0, expr.range);

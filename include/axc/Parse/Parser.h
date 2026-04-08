@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "axc/AST/AST.h"
@@ -52,7 +53,6 @@ class Parser {
     std::unique_ptr<Stmt> parseIfStmt();
     std::unique_ptr<Stmt> parseWhileStmt();
     std::unique_ptr<Stmt> parseForStmt();
-    std::unique_ptr<Stmt> parseForeachStmt();
     std::unique_ptr<Stmt> parseDoWhileStmt();
     std::unique_ptr<Stmt> parseSwitchStmt();
     std::unique_ptr<Stmt> parseBreakStmt();
@@ -89,7 +89,12 @@ class Parser {
     void skipSeparators();
     void consumeOptionalStatementTerminator();
     bool match(TokenKind kind);
+    bool matchIdentifier(std::string_view lexeme);
+    bool matchRangeOperator(SourceRange* range = nullptr, bool* inclusive = nullptr);
     bool check(TokenKind kind) const;
+    bool checkNext(TokenKind kind, std::size_t lookahead = 1) const;
+    bool checkIdentifier(std::string_view lexeme) const;
+    bool checkRangeOperator() const;
     const Token& advance();
     const Token& current() const;
     const Token& previous() const;

@@ -15,7 +15,6 @@ enum class TokenKind {
     FloatLiteral,
     CharLiteral,
     StringLiteral,
-    DialectBlock,
     LlvmBlock,
 
     KwFn,
@@ -36,11 +35,9 @@ enum class TokenKind {
     KwDefault,
     KwWhile,
     KwFor,
-    KwForeach,
     KwDo,
     KwBreak,
     KwContinue,
-    KwIn,
     KwAs,
     KwFlags,
     KwFlag,
@@ -91,7 +88,6 @@ enum class TokenKind {
     Dot,
     At,
     Hash,
-    Dollar,
     Question,
     QuestionDot,
     Equal,
@@ -128,8 +124,6 @@ enum class TokenKind {
     ShiftLeft,
     ShiftRight,
     Arrow,
-    Range,
-    RangeInclusive,
     FatArrow,
 };
 

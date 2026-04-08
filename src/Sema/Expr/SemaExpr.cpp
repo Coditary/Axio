@@ -196,41 +196,6 @@ std::optional<std::uint64_t> SemaImpl::evalExpr(const Expr& expr) const {
                     return static_cast<std::uint64_t>((*lhs & *rhs) == *rhs);
                 case BinaryOp::IsNot:
                     return static_cast<std::uint64_t>((*lhs & *rhs) != *rhs);
-                case BinaryOp::InRange: {
-                    if (binary.rhs->kind != ExprKind::Range) {
-                        return std::nullopt;
-                    }
-                    const auto& range = static_cast<const RangeExpr&>(*binary.rhs);
-                    const auto start = evalExpr(*range.start);
-                    const auto end = evalExpr(*range.end);
-                    if (!start.has_value() || !end.has_value()) {
-                        return std::nullopt;
-                    }
-
-                    const auto enumName = enumTypeName(*range.start);
-                    if (enumName.has_value()) {
-                        const auto infoIt = enumInfos_.find(*enumName);
-                        if (infoIt != enumInfos_.end()) {
-                            const std::uint64_t maxOrdinal = infoIt->second.maxOrdinal;
-                            std::uint64_t current = *start;
-                            do {
-                                if (current == *lhs) {
-                                    return 1ULL;
-                                }
-                                if (current == *end) {
-                                    return range.inclusive ? 1ULL : 0ULL;
-                                }
-                                current = current == maxOrdinal ? 0 : current + 1;
-                            } while (current != *start);
-                            return 0ULL;
-                        }
-                    }
-
-                    if (*start <= *end) {
-                        return static_cast<std::uint64_t>(*lhs >= *start && (range.inclusive ? *lhs <= *end : *lhs < *end));
-                    }
-                    return static_cast<std::uint64_t>(*lhs >= *start || (range.inclusive ? *lhs <= *end : *lhs < *end));
-                }
                 case BinaryOp::Assign:
                     return std::nullopt;
             }
@@ -264,13 +229,10 @@ std::optional<std::uint64_t> SemaImpl::evalExpr(const Expr& expr) const {
                     return std::nullopt;
             }
         }
-        case ExprKind::Range:
         case ExprKind::FloatLiteral:
         case ExprKind::StringLiteral:
         case ExprKind::NullLiteral:
         case ExprKind::Call:
-        case ExprKind::CompileCall:
-        case ExprKind::Dialect:
             return std::nullopt;
     }
     return std::nullopt;
@@ -327,9 +289,6 @@ void SemaImpl::validateExpr(const Expr& expr) {
                     }
                 }
             }
-            if (binary.op == BinaryOp::InRange) {
-                diagnostics_.warning(binary.range, "range membership is parsed but not yet lowered in codegen");
-            }
             break;
         }
         case ExprKind::Unary: {
@@ -357,11 +316,10 @@ void SemaImpl::validateExpr(const Expr& expr) {
                     diagnostics_.error(unary.range, "cannot mutate const storage '" + target->name + "'");
                 }
             }
-            if (unary.op == UnaryOp::IsNonNull && unary.operand->kind == ExprKind::DeclRef) {
-                const auto& ref = static_cast<const DeclRefExpr&>(*unary.operand);
-                auto it = symbols_.find(ref.name);
-                if (it != symbols_.end() && !it->second.nullable) {
-                    diagnostics_.warning(unary.range, "null-check postfix '?' used on a value that is not known to be nullable");
+            if (unary.op == UnaryOp::IsNonNull) {
+                const auto operandType = exprType(*unary.operand);
+                if (!operandType.has_value() || !typeSupportsNullability(*operandType) || operandType->pointerDepth == 0) {
+                    diagnostics_.error(unary.range, "postfix '?' requires a nullable pointer value");
                 }
             }
             break;
@@ -376,12 +334,6 @@ void SemaImpl::validateExpr(const Expr& expr) {
         case ExprKind::BoolLiteral:
         case ExprKind::CharLiteral:
             break;
-        case ExprKind::Range: {
-            const auto& range = static_cast<const RangeExpr&>(expr);
-            validateExpr(*range.start);
-            validateExpr(*range.end);
-            break;
-        }
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             validateExpr(*call.callee);
@@ -415,7 +367,7 @@ void SemaImpl::validateExpr(const Expr& expr) {
                     const auto& ref = static_cast<const DeclRefExpr&>(*member.base);
                     auto it = symbols_.find(ref.name);
                     if (it != symbols_.end() && !it->second.nullable) {
-                        diagnostics_.warning(call.range, "null-safe call used on a value that is not known to be nullable");
+                        diagnostics_.error(call.range, "null-safe call requires a nullable pointer receiver");
                     }
                 }
                 std::optional<Type> baseType = exprType(*member.base);
@@ -505,6 +457,9 @@ void SemaImpl::validateExpr(const Expr& expr) {
                     if (it != symbols_.end() && it->second.nullable && !member.nullSafe) {
                         diagnostics_.warning(call.range, "method call may dereference a nullable value; use '?.' or guard it with 'if value?'");
                     }
+                    if (member.nullSafe && it != symbols_.end() && !it->second.nullable) {
+                        diagnostics_.error(call.range, "null-safe call requires a nullable pointer receiver");
+                    }
                 }
                 std::optional<Type> baseType = exprType(*member.base);
                 if (baseType.has_value() && classInfos_.contains(baseType->name)) {
@@ -528,7 +483,7 @@ void SemaImpl::validateExpr(const Expr& expr) {
                 }
                 if (member.nullSafe) {
                     if (it != symbols_.end() && !it->second.nullable) {
-                        diagnostics_.warning(member.range, "null-safe member access used on a value that is not known to be nullable");
+                        diagnostics_.error(member.range, "null-safe member access requires a nullable pointer base");
                     }
                 }
             }
@@ -565,16 +520,6 @@ void SemaImpl::validateExpr(const Expr& expr) {
             }
             break;
         }
-        case ExprKind::CompileCall: {
-            const auto& call = static_cast<const CompileCallExpr&>(expr);
-            for (const auto& arg : call.arguments) {
-                validateExpr(*arg);
-            }
-            break;
-        }
-        case ExprKind::Dialect:
-            diagnostics_.warning(expr.range, "dialect blocks are parsed but not yet lowered");
-            break;
         case ExprKind::IntegerLiteral:
         case ExprKind::StringLiteral:
         case ExprKind::NullLiteral:

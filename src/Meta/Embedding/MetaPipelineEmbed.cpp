@@ -33,12 +33,6 @@ void visitExpr(const Expr* expr, Fn&& fn) {
             visitExpr(cast->value.get(), fn);
             break;
         }
-        case ExprKind::Range: {
-            const auto* range = static_cast<const RangeExpr*>(expr);
-            visitExpr(range->start.get(), fn);
-            visitExpr(range->end.get(), fn);
-            break;
-        }
         case ExprKind::Call: {
             const auto* call = static_cast<const CallExpr*>(expr);
             visitExpr(call->callee.get(), fn);
@@ -62,13 +56,6 @@ void visitExpr(const Expr* expr, Fn&& fn) {
             }
             break;
         }
-        case ExprKind::CompileCall: {
-            const auto* call = static_cast<const CompileCallExpr*>(expr);
-            for (const auto& arg : call->arguments) {
-                visitExpr(arg.get(), fn);
-            }
-            break;
-        }
         case ExprKind::IntegerLiteral:
         case ExprKind::FloatLiteral:
         case ExprKind::BoolLiteral:
@@ -76,7 +63,6 @@ void visitExpr(const Expr* expr, Fn&& fn) {
         case ExprKind::StringLiteral:
         case ExprKind::NullLiteral:
         case ExprKind::DeclRef:
-        case ExprKind::Dialect:
             break;
     }
 }
@@ -133,12 +119,6 @@ void visitStmtExprs(const Stmt* stmt, const std::function<void(const Expr*)>& fn
             visitStmtExprs(forStmt->body.get(), fn);
             break;
         }
-        case StmtKind::Foreach: {
-            const auto* foreachStmt = static_cast<const ForeachStmt*>(stmt);
-            visitExpr(foreachStmt->iterable.get(), fn);
-            visitStmtExprs(foreachStmt->body.get(), fn);
-            break;
-        }
         case StmtKind::DoWhile: {
             const auto* doWhileStmt = static_cast<const DoWhileStmt*>(stmt);
             visitStmtExprs(doWhileStmt->body.get(), fn);
@@ -165,33 +145,7 @@ void visitStmtExprs(const Stmt* stmt, const std::function<void(const Expr*)>& fn
 }  // namespace
 
 void MetaPipeline::validateEmbedCalls(TranslationUnit& translationUnit) const {
-    for (const auto& declaration : translationUnit.declarations) {
-        if (declaration->kind != DeclKind::Function) {
-            continue;
-        }
-
-        const auto* function = static_cast<const FunctionDecl*>(declaration.get());
-        visitStmtExprs(function->body.get(), [this](const Expr* expr) {
-            if (expr == nullptr) {
-                return;
-            }
-
-            if (expr->kind == ExprKind::CompileCall) {
-                const auto* call = static_cast<const CompileCallExpr*>(expr);
-                if (call->callee != "readfile" && call->callee != "generate_open_api") {
-                    diagnostics_.warning(call->range, "unknown compile function '$" + call->callee + "' ignored");
-                    return;
-                }
-                if (call->arguments.empty() || call->arguments.front()->kind != ExprKind::StringLiteral) {
-                    diagnostics_.error(call->range, "$" + call->callee + " expects a leading string literal argument");
-                }
-            }
-
-            if (expr->kind == ExprKind::Dialect) {
-                diagnostics_.warning(expr->range, "dialect blocks are parsed but not yet lowered");
-            }
-        });
-    }
+    (void)translationUnit;
 }
 
 }  // namespace axc

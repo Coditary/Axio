@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -153,8 +152,6 @@ class ModuleEmitter {
     llvm::Value* emitStringConstant(const std::string& value, const std::string& nameHint);
     /// @brief Lower an expression that may yield multiple runtime values.
     MultiValue emitExprValues(const Expr& expr);
-    /// @brief Lower a compile-time intrinsic call.
-    llvm::Value* emitCompileCall(const CompileCallExpr& call);
     /// @brief Lower an expression as an addressable l-value.
     llvm::Value* emitLValue(const Expr& expr);
     /// @brief Lower an expression as a single runtime LLVM value.

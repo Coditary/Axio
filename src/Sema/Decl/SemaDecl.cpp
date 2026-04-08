@@ -10,26 +10,6 @@
 
 namespace axc {
 
-Type SemaImpl::foreachElementType(const ForeachStmt& stmt) const {
-    Type elementType = stmt.bindingType;
-    if (!elementType.name.empty()) {
-        return elementType;
-    }
-    if (!stmt.iterable) {
-        return elementType;
-    }
-    auto iterableType = exprType(*stmt.iterable);
-    if (!iterableType.has_value()) {
-        return elementType;
-    }
-    elementType = *iterableType;
-    if (!elementType.arrayExtents.empty()) {
-        elementType.arrayExtents.erase(elementType.arrayExtents.begin());
-    }
-    elementType.range = stmt.bindingRange;
-    return elementType;
-}
-
 std::vector<std::string> SemaImpl::missingEnumSwitchCases(const SwitchStmt& stmt, const Type& conditionType) const {
     std::vector<std::string> missing;
     auto enumIt = enumInfos_.find(conditionType.name);
@@ -94,46 +74,8 @@ std::vector<std::pair<std::uint64_t, std::string>> SemaImpl::expandSwitchPattern
         return std::to_string(value);
     };
 
-    if (!pattern.isRange) {
-        if (auto evaluated = evalExpr(*pattern.value); evaluated.has_value()) {
-            values.emplace_back(*evaluated, formatValue(*evaluated));
-        }
-        return values;
-    }
-
-    const auto* range = dynamic_cast<const RangeExpr*>(pattern.value.get());
-    if (range == nullptr || range->start == nullptr || range->end == nullptr) {
-        return values;
-    }
-
-    const auto start = evalExpr(*range->start);
-    const auto end = evalExpr(*range->end);
-    if (!start.has_value() || !end.has_value()) {
-        return values;
-    }
-
-    auto enumIt = enumInfos_.find(conditionType.name);
-    if (enumIt != enumInfos_.end() && !enumIt->second.isFlags) {
-        if (*start > *end) {
-            return values;
-        }
-        for (std::uint64_t current = *start; current <= *end; ++current) {
-            if (current == *end && !range->inclusive) {
-                break;
-            }
-            values.emplace_back(current, formatValue(current));
-        }
-        return values;
-    }
-
-    if (*start > *end) {
-        return values;
-    }
-    for (std::uint64_t current = *start; current <= *end; ++current) {
-        if (current == *end && !range->inclusive) {
-            break;
-        }
-        values.emplace_back(current, formatValue(current));
+    if (auto evaluated = evalExpr(*pattern.value); evaluated.has_value()) {
+        values.emplace_back(*evaluated, formatValue(*evaluated));
     }
     return values;
 }
@@ -511,29 +453,6 @@ void SemaImpl::validateStmt(const Stmt& stmt, const FunctionDecl& fn, std::size_
             symbolTypes_ = savedTypes;
             break;
         }
-        case StmtKind::Foreach: {
-            const auto& foreachStmt = static_cast<const ForeachStmt&>(stmt);
-            validateExpr(*foreachStmt.iterable);
-            requireSingleValue(*foreachStmt.iterable, "foreach iterables must be single values");
-            Type elementType = foreachElementType(foreachStmt);
-            if (elementType.name.empty()) {
-                diagnostics_.error(foreachStmt.range, "foreach currently requires an iterable with a known element type");
-                break;
-            }
-            auto iterableType = exprType(*foreachStmt.iterable);
-            if (!iterableType.has_value() || iterableType->arrayExtents.empty()) {
-                diagnostics_.error(foreachStmt.iterable->range, "foreach currently supports only array values");
-                break;
-            }
-            const auto savedSymbols = symbols_;
-            const auto savedTypes = symbolTypes_;
-            symbolTypes_[foreachStmt.bindingName] = elementType;
-            symbols_[foreachStmt.bindingName] = ValueInfo {ownershipFromType(elementType), elementType.name, typeSupportsNullability(elementType), true};
-            validateStmt(*foreachStmt.body, fn, loopDepth + 1, switchDepth);
-            symbols_ = savedSymbols;
-            symbolTypes_ = savedTypes;
-            break;
-        }
         case StmtKind::DoWhile: {
             const auto& doWhileStmt = static_cast<const DoWhileStmt&>(stmt);
             validateStmt(*doWhileStmt.body, fn, loopDepth + 1, switchDepth);
@@ -559,17 +478,9 @@ void SemaImpl::validateStmt(const Stmt& stmt, const FunctionDecl& fn, std::size_
                 }
                 for (const auto& pattern : switchCase.patterns) {
                     validateExpr(*pattern.value);
-                    if (pattern.isRange) {
-                        if (pattern.value->kind != ExprKind::Range) {
-                            diagnostics_.error(pattern.range, "switch range cases must use a range pattern");
-                        } else if (expandSwitchPatternValues(pattern, conditionType.value_or(Type {})).empty()) {
-                            diagnostics_.error(pattern.range, "switch range cases must use constant bounds");
-                        }
-                    } else {
-                        requireSingleValue(*pattern.value, "switch case values must be single values");
-                        if (!evalExpr(*pattern.value).has_value()) {
-                            diagnostics_.error(pattern.range, "switch case values must be compile-time constants");
-                        }
+                    requireSingleValue(*pattern.value, "switch case values must be single values");
+                    if (!evalExpr(*pattern.value).has_value()) {
+                        diagnostics_.error(pattern.range, "switch case values must be compile-time constants");
                     }
 
                     if (conditionType.has_value()) {

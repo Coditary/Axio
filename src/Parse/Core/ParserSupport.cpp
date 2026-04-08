@@ -245,8 +245,51 @@ bool Parser::match(TokenKind kind) {
     return true;
 }
 
+bool Parser::matchIdentifier(std::string_view lexeme) {
+    if (!checkIdentifier(lexeme)) {
+        return false;
+    }
+    advance();
+    return true;
+}
+
+bool Parser::matchRangeOperator(SourceRange* range, bool* inclusive) {
+    if (!checkRangeOperator()) {
+        return false;
+    }
+
+    const SourceRange start = advance().range;
+    SourceRange end = advance().range;
+    bool sawInclusive = false;
+    if (check(TokenKind::Equal)) {
+        end = advance().range;
+        sawInclusive = true;
+    }
+
+    if (range != nullptr) {
+        *range = combine(start, end);
+    }
+    if (inclusive != nullptr) {
+        *inclusive = sawInclusive;
+    }
+    return true;
+}
+
 bool Parser::check(TokenKind kind) const {
     return current().kind == kind;
+}
+
+bool Parser::checkNext(TokenKind kind, std::size_t lookahead) const {
+    const std::size_t probe = index_ + lookahead;
+    return probe < tokens_.size() && tokens_[probe].kind == kind;
+}
+
+bool Parser::checkIdentifier(std::string_view lexeme) const {
+    return current().kind == TokenKind::Identifier && current().lexeme == lexeme;
+}
+
+bool Parser::checkRangeOperator() const {
+    return check(TokenKind::Dot) && checkNext(TokenKind::Dot);
 }
 
 const Token& Parser::advance() {

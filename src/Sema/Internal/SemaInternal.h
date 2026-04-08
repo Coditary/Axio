@@ -92,8 +92,6 @@ class SemaImpl {
     void requireSingleValue(const Expr& expr, const std::string& message);
     /// @brief Build enum metadata tables used by constant evaluation and switch checks.
     void buildEnumTables(TranslationUnit& translationUnit);
-    /// @brief Infer the element type yielded by a `foreach` statement.
-    Type foreachElementType(const ForeachStmt& stmt) const;
     /// @brief Compute missing enum cases for exhaustiveness diagnostics.
     std::vector<std::string> missingEnumSwitchCases(const SwitchStmt& stmt, const Type& conditionType) const;
     /// @brief Expand a switch pattern into concrete constant values for overlap/exhaustiveness checks.

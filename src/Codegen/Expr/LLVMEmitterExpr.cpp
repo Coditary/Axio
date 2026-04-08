@@ -425,7 +425,7 @@ MultiValue ModuleEmitter::emitExprValues(const Expr& expr) {
                 return result;
             }
 
-            diagnostics_.error(call.range, "only direct function calls are lowered in this prototype");
+            diagnostics_.error(call.range, "call target must resolve to a declared function or method");
             return {};
         }
         default: {
@@ -433,28 +433,6 @@ MultiValue ModuleEmitter::emitExprValues(const Expr& expr) {
             return value == nullptr ? MultiValue {} : MultiValue {{value}};
         }
     }
-}
-
-llvm::Value* ModuleEmitter::emitCompileCall(const CompileCallExpr& call) {
-    if ((call.callee != "readfile" && call.callee != "generate_open_api") || call.arguments.empty() ||
-        call.arguments.front()->kind != ExprKind::StringLiteral) {
-        diagnostics_.error(call.range, "unsupported compile function expression");
-        return nullptr;
-    }
-
-    const auto* pathExpr = static_cast<const StringLiteralExpr*>(call.arguments.front().get());
-    const std::filesystem::path baseDir = sourceManager_.path().parent_path();
-    const std::filesystem::path filePath = baseDir / pathExpr->value;
-
-    std::ifstream input(filePath, std::ios::binary);
-    if (!input) {
-        diagnostics_.error(call.range, "failed to open compile-time file '" + filePath.string() + "'");
-        return nullptr;
-    }
-
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    return emitStringConstant(buffer.str(), call.callee == "readfile" ? "readfile" : "openapi");
 }
 
 llvm::Value* ModuleEmitter::emitLValue(const Expr& expr) {
@@ -630,13 +608,12 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                     if (value->getType()->isPointerTy()) {
                         return builder_.CreateICmpNE(value, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(value->getType())), "nonnull");
                     }
-                    if (value->getType()->isFloatingPointTy()) {
-                        return builder_.CreateFCmpONE(value, llvm::ConstantFP::get(value->getType(), 0.0), "nonnull.fp");
+                    Type operandType = inferExprType(*unary.operand);
+                    if (!operandType.pointerDepth) {
+                        diagnostics_.error(unary.range, "postfix '?' requires a nullable pointer value");
+                        return nullptr;
                     }
-                    if (value->getType()->isIntegerTy()) {
-                        return builder_.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0), "nonnull.int");
-                    }
-                    diagnostics_.error(unary.range, "postfix '?' currently requires a nullable or pointer-like value");
+                    diagnostics_.error(unary.range, "postfix '?' requires a nullable pointer value");
                     return nullptr;
                 }
             }
@@ -671,65 +648,6 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                 builder_.CreateStore(value, address);
                 return value;
             }
-
-            if (binary.op == BinaryOp::InRange) {
-                const auto* range = dynamic_cast<const RangeExpr*>(binary.rhs.get());
-                if (range == nullptr) {
-                    diagnostics_.error(binary.range, "range membership expects a range expression on the right-hand side");
-                    return nullptr;
-                }
-                llvm::Value* value = emitExpr(*binary.lhs);
-                llvm::Value* start = emitExpr(*range->start);
-                llvm::Value* end = emitExpr(*range->end);
-                if (value == nullptr || start == nullptr || end == nullptr) {
-                    return nullptr;
-                }
-
-                auto enumNameFromExpr = [&](const Expr& enumExpr) -> std::optional<std::string> {
-                    auto qualified = moduleQualifiedName(enumExpr);
-                    if (!qualified.has_value()) {
-                        return std::nullopt;
-                    }
-                    const std::size_t split = qualified->find('.');
-                    if (split == std::string::npos) {
-                        return std::nullopt;
-                    }
-                    const std::string root = qualified->substr(0, split);
-                    if (enumValues_.contains(root)) {
-                        return root;
-                    }
-                    return std::nullopt;
-                };
-
-                if (auto enumName = enumNameFromExpr(*range->start); enumName.has_value()) {
-                    if (auto* valueConst = llvm::dyn_cast<llvm::ConstantInt>(value)) {
-                        if (auto* startConst = llvm::dyn_cast<llvm::ConstantInt>(start)) {
-                            if (auto* endConst = llvm::dyn_cast<llvm::ConstantInt>(end)) {
-                                const std::uint64_t lhs = valueConst->getZExtValue();
-                                const std::uint64_t startOrdinal = startConst->getZExtValue();
-                                const std::uint64_t endOrdinal = endConst->getZExtValue();
-                                const std::uint64_t maxOrdinal = enumValues_.at(*enumName).maxOrdinal;
-                                std::uint64_t current = startOrdinal;
-                                do {
-                                    if (current == lhs) {
-                                        return llvm::ConstantInt::getBool(context_, true);
-                                    }
-                                    if (current == endOrdinal) {
-                                        return llvm::ConstantInt::getBool(context_, range->inclusive);
-                                    }
-                                    current = current == maxOrdinal ? 0 : current + 1;
-                                } while (current != startOrdinal);
-                                return llvm::ConstantInt::getBool(context_, false);
-                            }
-                        }
-                    }
-                }
-
-                llvm::Value* lower = builder_.CreateICmpSGE(value, start, "range.lower");
-                llvm::Value* upper = range->inclusive ? builder_.CreateICmpSLE(value, end, "range.upper") : builder_.CreateICmpSLT(value, end, "range.upper");
-                return builder_.CreateAnd(lower, upper, "inrange");
-            }
-
             llvm::Value* lhs = emitExpr(*binary.lhs);
             llvm::Value* rhs = emitExpr(*binary.rhs);
             if (lhs == nullptr || rhs == nullptr) {
@@ -855,14 +773,10 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
                     return builder_.CreateICmpNE(masked, rhs, "enum.isnot");
                 }
                 case BinaryOp::Assign:
-                case BinaryOp::InRange:
                     break;
             }
             return nullptr;
         }
-        case ExprKind::Range:
-            diagnostics_.error(expr.range, "standalone range expressions are not first-class runtime values yet");
-            return nullptr;
         case ExprKind::Call: {
             MultiValue values = emitExprValues(expr);
             if (values.values.empty()) {
@@ -1164,11 +1078,6 @@ llvm::Value* ModuleEmitter::emitExpr(const Expr& expr) {
             }
             return aggregate;
         }
-        case ExprKind::CompileCall:
-            return emitCompileCall(static_cast<const CompileCallExpr&>(expr));
-        case ExprKind::Dialect:
-            diagnostics_.error(expr.range, "dialect blocks are not lowered to runtime values yet");
-            return nullptr;
     }
 
     return nullptr;

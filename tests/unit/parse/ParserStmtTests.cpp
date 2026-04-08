@@ -106,16 +106,12 @@ AXC_TEST(Parser_ParsesSwitchAndLoopStatements) {
     const auto path = dir.path / "switch_loops.ax";
     AXC_EXPECT(axc::unit::writeFile(path,
                                     "fn main() int {\n"
-                                    "    let values int[] = {1, 2, 3}\n"
                                     "    let sum int = 0\n"
                                     "    while sum < 3 {\n"
                                     "        sum++\n"
                                     "    }\n"
                                     "    for let i int = 0; i < 3; i++ {\n"
                                     "        sum += i\n"
-                                    "    }\n"
-                                    "    foreach value in values {\n"
-                                    "        sum += value\n"
                                     "    }\n"
                                     "    do {\n"
                                     "        sum--\n"
@@ -137,14 +133,13 @@ AXC_TEST(Parser_ParsesSwitchAndLoopStatements) {
     AXC_EXPECT(axc::unit::parseSource(file, path));
     const auto* mainFn = axc::unit::findFunction(file.unit, "main");
     AXC_EXPECT(mainFn != nullptr && mainFn->body != nullptr);
-    AXC_EXPECT_EQ(mainFn->body->statements.size(), 7U);
-    AXC_EXPECT_EQ(mainFn->body->statements[2]->kind, axc::StmtKind::While);
-    AXC_EXPECT_EQ(mainFn->body->statements[3]->kind, axc::StmtKind::For);
-    AXC_EXPECT_EQ(mainFn->body->statements[4]->kind, axc::StmtKind::Foreach);
-    AXC_EXPECT_EQ(mainFn->body->statements[5]->kind, axc::StmtKind::DoWhile);
-    AXC_EXPECT_EQ(mainFn->body->statements[6]->kind, axc::StmtKind::Switch);
+    AXC_EXPECT_EQ(mainFn->body->statements.size(), 5U);
+    AXC_EXPECT_EQ(mainFn->body->statements[1]->kind, axc::StmtKind::While);
+    AXC_EXPECT_EQ(mainFn->body->statements[2]->kind, axc::StmtKind::For);
+    AXC_EXPECT_EQ(mainFn->body->statements[3]->kind, axc::StmtKind::DoWhile);
+    AXC_EXPECT_EQ(mainFn->body->statements[4]->kind, axc::StmtKind::Switch);
 
-    const auto& switchStmt = static_cast<const axc::SwitchStmt&>(*mainFn->body->statements[6]);
+    const auto& switchStmt = static_cast<const axc::SwitchStmt&>(*mainFn->body->statements[4]);
     AXC_EXPECT_EQ(switchStmt.cases.size(), 3U);
     AXC_EXPECT_EQ(switchStmt.cases[0].patterns.size(), 2U);
     AXC_EXPECT(switchStmt.cases[2].isDefault);
@@ -199,49 +194,24 @@ AXC_TEST(Parser_ParsesBreakAndContinueInsideLoopsAndSwitch) {
     return true;
 }
 
-AXC_TEST(Parser_ParsesSwitchRangeCases) {
-    auto dir = axc::unit::makeTempDir("parser_stmt_switch_ranges");
-    const auto path = dir.path / "switch_ranges.ax";
+AXC_TEST(Parser_RejectsRemovedRangeAndForeachForms) {
+    auto dir = axc::unit::makeTempDir("parser_removed_forms");
+    const auto path = dir.path / "removed_forms.ax";
     AXC_EXPECT(axc::unit::writeFile(path,
-                                    "enum Color() {\n"
-                                    "    Red,\n"
-                                    "    Green,\n"
-                                    "    Blue,\n"
-                                    "}\n"
-                                    "fn main(color Color, value int) int {\n"
-                                    "    switch color {\n"
-                                    "        case Color.Red..=Color.Green {\n"
-                                    "            return 1\n"
-                                    "        }\n"
-                                    "        default {\n"
-                                    "            return 2\n"
-                                    "        }\n"
+                                    "fn main() int {\n"
+                                    "    let values int[] = {1, 2, 3}\n"
+                                    "    foreach value in values {\n"
+                                    "        return value\n"
                                     "    }\n"
-                                    "    switch value {\n"
-                                    "        case 1..3, 7 {\n"
-                                    "            return 3\n"
-                                    "        }\n"
-                                    "        default {\n"
-                                    "            return 4\n"
+                                    "    switch 2 {\n"
+                                    "        case 1..3 {\n"
+                                    "            return 1\n"
                                     "        }\n"
                                     "    }\n"
                                     "}\n"));
 
     axc::unit::ParsedFile file;
     AXC_EXPECT(axc::unit::parseSource(file, path));
-    const auto* mainFn = axc::unit::findFunction(file.unit, "main");
-    AXC_EXPECT(mainFn != nullptr && mainFn->body != nullptr);
-    AXC_EXPECT_EQ(mainFn->body->statements.size(), 2U);
-
-    const auto& enumSwitch = static_cast<const axc::SwitchStmt&>(*mainFn->body->statements[0]);
-    AXC_EXPECT_EQ(enumSwitch.cases[0].patterns.size(), 1U);
-    AXC_EXPECT(enumSwitch.cases[0].patterns[0].isRange);
-    AXC_EXPECT_EQ(enumSwitch.cases[0].patterns[0].value->kind, axc::ExprKind::Range);
-    AXC_EXPECT(static_cast<const axc::RangeExpr&>(*enumSwitch.cases[0].patterns[0].value).inclusive);
-
-    const auto& intSwitch = static_cast<const axc::SwitchStmt&>(*mainFn->body->statements[1]);
-    AXC_EXPECT_EQ(intSwitch.cases[0].patterns.size(), 2U);
-    AXC_EXPECT(intSwitch.cases[0].patterns[0].isRange);
-    AXC_EXPECT(!intSwitch.cases[0].patterns[1].isRange);
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics, "foreach is no longer supported", axc::DiagnosticSeverity::Error));
     return true;
 }

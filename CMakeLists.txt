@@ -124,6 +124,7 @@ if(BUILD_TESTING)
     add_executable(axc_unit_tests
         ${AXC_UNIT_TEST_SOURCES}
     )
+    add_dependencies(axc_unit_tests axc)
     target_link_libraries(axc_unit_tests PRIVATE axc_core)
     target_include_directories(axc_unit_tests PRIVATE include tests/unit ${LLVM_INCLUDE_DIRS})
     add_test(NAME axc_unit_tests COMMAND axc_unit_tests)

@@ -22,7 +22,7 @@ AXC_TEST(Sema_AllowsGuardedNullableMemberAccess) {
     return true;
 }
 
-AXC_TEST(Sema_WarnsOnNullSafeMemberAccessForNonNullableValues) {
+AXC_TEST(Sema_RejectsNullSafeMemberAccessForNonNullableValues) {
     auto dir = axc::unit::makeTempDir("sema_nullsafe_member");
     const auto path = dir.path / "nullsafe_member.ax";
     AXC_EXPECT(axc::unit::writeFile(path,
@@ -37,7 +37,7 @@ AXC_TEST(Sema_WarnsOnNullSafeMemberAccessForNonNullableValues) {
 
     axc::unit::ParsedFile file;
     AXC_EXPECT(axc::unit::analyzeSource(file, path));
-    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics, "null-safe member access used on a value that is not known to be nullable", axc::DiagnosticSeverity::Warning));
+    AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics, "null-safe member access requires a nullable pointer base", axc::DiagnosticSeverity::Error));
     return true;
 }
 

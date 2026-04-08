@@ -14,7 +14,6 @@ enum class StmtKind {
     If,
     While,
     For,
-    Foreach,
     DoWhile,
     Switch,
     Break,
@@ -122,28 +121,6 @@ struct ForStmt final : Stmt {
     std::unique_ptr<CompoundStmt> body;
 };
 
-/// @brief `foreach` loop over an iterable value.
-struct ForeachStmt final : Stmt {
-    ForeachStmt(std::string bindingName,
-                Type bindingType,
-                std::unique_ptr<Expr> iterable,
-                std::unique_ptr<CompoundStmt> body,
-                SourceRange bindingRange,
-                SourceRange range)
-        : Stmt(StmtKind::Foreach, range),
-          bindingName(std::move(bindingName)),
-          bindingType(std::move(bindingType)),
-          iterable(std::move(iterable)),
-          body(std::move(body)),
-          bindingRange(bindingRange) {}
-
-    std::string bindingName {};
-    Type bindingType {};
-    std::unique_ptr<Expr> iterable;
-    std::unique_ptr<CompoundStmt> body;
-    SourceRange bindingRange {};
-};
-
 /// @brief `do { ... } while cond` loop statement.
 struct DoWhileStmt final : Stmt {
     DoWhileStmt(std::unique_ptr<CompoundStmt> body, std::unique_ptr<Expr> condition, SourceRange range)
@@ -153,10 +130,9 @@ struct DoWhileStmt final : Stmt {
     std::unique_ptr<Expr> condition;
 };
 
-/// @brief Single switch-case pattern, either an exact value or a range.
+/// @brief Single switch-case pattern with one exact compile-time value.
 struct SwitchCasePattern {
     std::unique_ptr<Expr> value;
-    bool isRange = false;
     SourceRange range {};
 };
 
@@ -168,7 +144,7 @@ struct SwitchCase {
     SourceRange range {};
 };
 
-/// @brief `switch` statement over constant case patterns and ranges.
+/// @brief `switch` statement over constant case patterns.
 struct SwitchStmt final : Stmt {
     SwitchStmt(std::unique_ptr<Expr> condition, std::vector<SwitchCase> cases, SourceRange range)
         : Stmt(StmtKind::Switch, range), condition(std::move(condition)), cases(std::move(cases)) {}

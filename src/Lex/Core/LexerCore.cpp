@@ -30,11 +30,9 @@ std::vector<Token> Lexer::lex() {
         {"default", TokenKind::KwDefault},
         {"while", TokenKind::KwWhile},
         {"for", TokenKind::KwFor},
-        {"foreach", TokenKind::KwForeach},
         {"do", TokenKind::KwDo},
         {"break", TokenKind::KwBreak},
         {"continue", TokenKind::KwContinue},
-        {"in", TokenKind::KwIn},
         {"as", TokenKind::KwAs},
         {"Flags", TokenKind::KwFlags},
         {"Flag", TokenKind::KwFlag},
@@ -120,38 +118,6 @@ std::vector<Token> Lexer::lex() {
                 break;
             }
             cursor += 2;
-            continue;
-        }
-
-        if (source[cursor] == '%' && cursor + 1 < source.size() && source[cursor + 1] == '%') {
-            const std::size_t begin = cursor;
-            cursor += 2;
-
-            const std::size_t nameBegin = cursor;
-            while (cursor < source.size() && detail::isIdentifierContinue(static_cast<unsigned char>(source[cursor]))) {
-                ++cursor;
-            }
-
-            if (cursor >= source.size() || source[cursor] != '{') {
-                diagnostics_.error(sourceManager_.range(begin, cursor), "expected '{' after dialect name");
-                continue;
-            }
-
-            const std::string dialectName(source.substr(nameBegin, cursor - nameBegin));
-            ++cursor;
-            const std::size_t contentBegin = cursor;
-            while (cursor + 2 < source.size() && !(source[cursor] == '}' && source[cursor + 1] == '%' && source[cursor + 2] == '%')) {
-                ++cursor;
-            }
-
-            if (cursor + 2 >= source.size()) {
-                diagnostics_.error(sourceManager_.range(begin, source.size()), "unterminated dialect block");
-                break;
-            }
-
-            const std::string content(source.substr(contentBegin, cursor - contentBegin));
-            cursor += 3;
-            push(TokenKind::DialectBlock, begin, cursor, dialectName + "\n" + content);
             continue;
         }
 
@@ -272,16 +238,6 @@ std::vector<Token> Lexer::lex() {
             return cursor + 2 < source.size() && source[cursor] == a && source[cursor + 1] == b && source[cursor + 2] == c;
         };
 
-        if (three('.', '.', '=')) {
-            cursor += 3;
-            push(TokenKind::RangeInclusive, begin, cursor, "..=");
-            continue;
-        }
-        if (two('.', '.')) {
-            cursor += 2;
-            push(TokenKind::Range, begin, cursor, "..");
-            continue;
-        }
         if (two('?', '.')) {
             cursor += 2;
             push(TokenKind::QuestionDot, begin, cursor, "?.");
@@ -485,7 +441,6 @@ std::vector<Token> Lexer::lex() {
             case '.': push(TokenKind::Dot, begin, cursor, "."); break;
             case '@': push(TokenKind::At, begin, cursor, "@"); break;
             case '#': push(TokenKind::Hash, begin, cursor, "#"); break;
-            case '$': push(TokenKind::Dollar, begin, cursor, "$"); break;
             case '?': push(TokenKind::Question, begin, cursor, "?"); break;
             case '=': push(TokenKind::Equal, begin, cursor, "="); break;
             case '!': push(TokenKind::Bang, begin, cursor, "!"); break;

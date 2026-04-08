@@ -55,24 +55,6 @@ std::unique_ptr<Expr> ExpressionParser::parsePrimary() {
         parser_.match(TokenKind::KwF32) || parser_.match(TokenKind::KwF64) || parser_.match(TokenKind::KwChar)) {
         return std::make_unique<DeclRefExpr>(parser_.previous().lexeme, parser_.previous().range);
     }
-    if (parser_.match(TokenKind::Dollar)) {
-        const SourceRange start = parser_.previous().range;
-        if (!parser_.expect(TokenKind::Identifier, "expected compile function name after '$'")) {
-            return std::make_unique<DeclRefExpr>("<error>", start);
-        }
-        const std::string callee = parser_.previous().lexeme;
-        parser_.expect(TokenKind::LParen, "expected '(' after compile function name");
-        auto args = parseArgumentList(TokenKind::RParen);
-        parser_.expect(TokenKind::RParen, "expected ')' after compile function arguments");
-        return std::make_unique<CompileCallExpr>(callee, std::move(args), parser_.combine(start, parser_.previous().range));
-    }
-    if (parser_.match(TokenKind::DialectBlock)) {
-        const std::string lexeme = parser_.previous().lexeme;
-        const auto split = lexeme.find('\n');
-        std::string dialect = split == std::string::npos ? lexeme : lexeme.substr(0, split);
-        std::string content = split == std::string::npos ? std::string() : lexeme.substr(split + 1);
-        return std::make_unique<DialectExpr>(std::move(dialect), std::move(content), parser_.previous().range);
-    }
     if (parser_.match(TokenKind::KwNew)) {
         const SourceRange start = parser_.previous().range;
         bool weak = parser_.match(TokenKind::KwWeak);

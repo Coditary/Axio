@@ -131,7 +131,7 @@ AXC_TEST(Sema_ReportsConcreteMissingEnumSwitchCases) {
                                     "}\n"
                                     "fn score(color Color) int {\n"
                                     "    switch color {\n"
-                                    "        case Color.Red..=Color.Green {\n"
+                                    "        case Color.Red, Color.Green {\n"
                                     "            return 1\n"
                                     "        }\n"
                                     "    }\n"
@@ -155,7 +155,7 @@ AXC_TEST(Sema_RejectsOverlappingSwitchCases) {
                                     "}\n"
                                     "fn score(color Color) int {\n"
                                     "    switch color {\n"
-                                    "        case Color.Red..=Color.Green {\n"
+                                    "        case Color.Red, Color.Green {\n"
                                     "            return 1\n"
                                     "        }\n"
                                     "        case Color.Green {\n"
@@ -181,7 +181,7 @@ AXC_TEST(Sema_RejectsNonConstantSwitchPatterns) {
     AXC_EXPECT(axc::unit::writeFile(path,
                                     "fn score(value int, limit int) int {\n"
                                     "    switch value {\n"
-                                    "        case 1..limit {\n"
+                                    "        case limit {\n"
                                     "            return 1\n"
                                     "        }\n"
                                     "        default {\n"
@@ -193,7 +193,7 @@ AXC_TEST(Sema_RejectsNonConstantSwitchPatterns) {
     axc::unit::ParsedFile file;
     AXC_EXPECT(axc::unit::analyzeSource(file, path));
     AXC_EXPECT(axc::unit::hasDiagnosticContaining(file.diagnostics,
-                                                  "switch range cases must use constant bounds",
+                                                  "switch case values must be compile-time constants",
                                                   axc::DiagnosticSeverity::Error));
     return true;
 }

@@ -44,10 +44,6 @@ std::unique_ptr<Stmt> Parser::parseForStmt() {
     return detail::StatementParser(*this).parseForStmt();
 }
 
-std::unique_ptr<Stmt> Parser::parseForeachStmt() {
-    return detail::StatementParser(*this).parseForeachStmt();
-}
-
 std::unique_ptr<Stmt> Parser::parseDoWhileStmt() {
     return detail::StatementParser(*this).parseDoWhileStmt();
 }
@@ -120,8 +116,17 @@ std::unique_ptr<Stmt> StatementParser::parseStatement() {
     if (parser_.check(TokenKind::KwFor)) {
         return parseForStmt();
     }
-    if (parser_.check(TokenKind::KwForeach)) {
-        return parseForeachStmt();
+    if (parser_.checkIdentifier("foreach")) {
+        parser_.diagnostics_.error(parser_.current().range, "foreach is no longer supported");
+        parser_.advance();
+        while (!parser_.check(TokenKind::EndOfFile) && !parser_.isSeparator(parser_.current()) && !parser_.check(TokenKind::LBrace)) {
+            parser_.advance();
+        }
+        if (parser_.check(TokenKind::LBrace)) {
+            parseCompoundStmt();
+        }
+        parser_.consumeOptionalStatementTerminator();
+        return nullptr;
     }
     if (parser_.check(TokenKind::KwDo)) {
         return parseDoWhileStmt();
@@ -306,32 +311,6 @@ std::unique_ptr<Stmt> StatementParser::parseForStmt() {
     return std::make_unique<ForStmt>(std::move(initializer), std::move(condition), std::move(step), std::move(body), parser_.combine(start, end));
 }
 
-std::unique_ptr<Stmt> StatementParser::parseForeachStmt() {
-    const SourceRange start = parser_.advance().range;
-    if (!(parser_.check(TokenKind::Identifier) || parser_.check(TokenKind::KwWeak))) {
-        parser_.diagnostics_.error(parser_.current().range, "expected loop variable name after 'foreach'");
-        return nullptr;
-    }
-    parser_.advance();
-    const std::string bindingName = parser_.previous().lexeme;
-    const SourceRange bindingRange = parser_.previous().range;
-
-    Type bindingType;
-    if (!parser_.check(TokenKind::KwIn)) {
-        bindingType = DeclarationParser(parser_).parseType();
-    }
-    parser_.expect(TokenKind::KwIn, "expected 'in' after foreach binding");
-    auto iterable = ExpressionParser(parser_).parseExpression();
-    auto body = parseCompoundStmt();
-    const SourceRange end = body ? body->range : (iterable ? iterable->range : bindingRange);
-    return std::make_unique<ForeachStmt>(bindingName,
-                                         std::move(bindingType),
-                                         std::move(iterable),
-                                         std::move(body),
-                                         bindingRange,
-                                         parser_.combine(start, end));
-}
-
 std::unique_ptr<Stmt> StatementParser::parseDoWhileStmt() {
     const SourceRange start = parser_.advance().range;
     auto body = parseCompoundStmt();
@@ -361,24 +340,17 @@ std::unique_ptr<Stmt> StatementParser::parseSwitchStmt() {
                 if (!first) {
                     break;
                 }
-                if (parser_.match(TokenKind::RangeInclusive) || parser_.match(TokenKind::Range)) {
-                    const bool inclusive = parser_.previous().kind == TokenKind::RangeInclusive;
+                SourceRange rangeOperator = first->range;
+                if (parser_.matchRangeOperator(&rangeOperator)) {
+                    const SourceRange rangeStart = first->range;
                     auto endExpr = ExpressionParser(parser_).parseBitwiseOr();
-                    if (!endExpr) {
-                        break;
-                    }
-                    SourceRange patternRange = parser_.combine(first->range, endExpr->range);
-                    SwitchCasePattern pattern;
-                    pattern.isRange = true;
-                    pattern.range = patternRange;
-                    pattern.value = std::make_unique<RangeExpr>(std::move(first), std::move(endExpr), inclusive, patternRange);
-                    entry.patterns.push_back(std::move(pattern));
-                } else {
-                    SwitchCasePattern pattern;
-                    pattern.range = first->range;
-                    pattern.value = std::move(first);
-                    entry.patterns.push_back(std::move(pattern));
+                    const SourceRange rangeEnd = endExpr ? endExpr->range : rangeOperator;
+                    parser_.diagnostics_.error(parser_.combine(rangeStart, rangeEnd), "switch range cases are no longer supported");
                 }
+                SwitchCasePattern pattern;
+                pattern.range = first->range;
+                pattern.value = std::move(first);
+                entry.patterns.push_back(std::move(pattern));
             } while (parser_.match(TokenKind::Comma));
         } else if (parser_.match(TokenKind::KwDefault)) {
             entry.isDefault = true;

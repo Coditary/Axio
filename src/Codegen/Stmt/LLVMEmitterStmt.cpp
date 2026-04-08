@@ -31,8 +31,6 @@ bool containsBreakForCurrentSwitch(const Stmt& stmt, std::size_t loopDepth = 0, 
             return containsBreakForCurrentSwitch(*static_cast<const WhileStmt&>(stmt).body, loopDepth + 1, switchDepth);
         case StmtKind::For:
             return containsBreakForCurrentSwitch(*static_cast<const ForStmt&>(stmt).body, loopDepth + 1, switchDepth);
-        case StmtKind::Foreach:
-            return containsBreakForCurrentSwitch(*static_cast<const ForeachStmt&>(stmt).body, loopDepth + 1, switchDepth);
         case StmtKind::DoWhile:
             return containsBreakForCurrentSwitch(*static_cast<const DoWhileStmt&>(stmt).body, loopDepth + 1, switchDepth);
         case StmtKind::Switch: {
@@ -71,89 +69,6 @@ std::optional<std::uint64_t> enumNameMaxOrdinal(const std::unordered_map<std::st
         return std::nullopt;
     }
     return it->second.maxOrdinal;
-}
-
-std::optional<std::pair<std::int64_t, std::int64_t>> constantRangeBounds(const Expr& expr, const std::unordered_map<std::string, EnumValueInfo>& enumValues) {
-    const auto* range = dynamic_cast<const RangeExpr*>(&expr);
-    if (range == nullptr || range->start == nullptr || range->end == nullptr) {
-        return std::nullopt;
-    }
-
-    auto evalConst = [&](const Expr& valueExpr) -> std::optional<std::int64_t> {
-        switch (valueExpr.kind) {
-            case ExprKind::IntegerLiteral:
-                return static_cast<const IntegerLiteralExpr&>(valueExpr).value;
-            case ExprKind::Member: {
-                auto qualified = qualifiedNameFromExpr(valueExpr);
-                if (!qualified.has_value()) {
-                    return std::nullopt;
-                }
-                for (const auto& [enumName, info] : enumValues) {
-                    auto it = info.values.find(*qualified);
-                    if (it != info.values.end()) {
-                        return static_cast<std::int64_t>(it->second);
-                    }
-                    const std::string prefix = enumName + ".";
-                    if (qualified->rfind(prefix, 0) == 0) {
-                        auto nestedIt = info.values.find(qualified->substr(prefix.size()));
-                        if (nestedIt != info.values.end()) {
-                            return static_cast<std::int64_t>(nestedIt->second);
-                        }
-                    }
-                }
-                return std::nullopt;
-            }
-            case ExprKind::DeclRef: {
-                const auto& ref = static_cast<const DeclRefExpr&>(valueExpr);
-                for (const auto& [_, info] : enumValues) {
-                    auto it = info.values.find(ref.name);
-                    if (it != info.values.end()) {
-                        return static_cast<std::int64_t>(it->second);
-                    }
-                }
-                return std::nullopt;
-            }
-            default:
-                return std::nullopt;
-        }
-    };
-
-    auto start = evalConst(*range->start);
-    auto end = evalConst(*range->end);
-    if (!start.has_value() || !end.has_value()) {
-        return std::nullopt;
-    }
-
-    auto enumMax = enumNameMaxOrdinal(enumValues, *range->start);
-    if (enumMax.has_value() && *start > *end) {
-        return std::nullopt;
-    }
-
-    std::int64_t upper = *end - (range->inclusive ? 0 : 1);
-    if (upper < *start) {
-        return std::pair<std::int64_t, std::int64_t> {*start, *start - 1};
-    }
-    return std::pair<std::int64_t, std::int64_t> {*start, upper};
-}
-
-std::optional<std::vector<std::int64_t>> constantRangeMembers(const Expr& expr, const std::unordered_map<std::string, EnumValueInfo>& enumValues) {
-    auto bounds = constantRangeBounds(expr, enumValues);
-    if (!bounds.has_value()) {
-        return std::nullopt;
-    }
-    const auto* range = dynamic_cast<const RangeExpr*>(&expr);
-    if (range == nullptr) {
-        return std::nullopt;
-    }
-    auto enumMax = enumNameMaxOrdinal(enumValues, *range->start);
-    if (!enumMax.has_value()) {
-        return std::nullopt;
-    }
-    std::vector<std::int64_t> members;
-    for (std::int64_t value = bounds->first; value <= bounds->second; ++value) {
-        members.push_back(value);
-    }
-    return members;
 }
 
 }  // namespace
@@ -484,74 +399,6 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
             locals_ = savedLocals;
             return true;
         }
-        case StmtKind::Foreach: {
-            const auto& foreachStmt = static_cast<const ForeachStmt&>(stmt);
-            Type iterableType = inferExprType(*foreachStmt.iterable);
-            if (iterableType.arrayExtents.empty() || !iterableType.arrayExtents.front().has_value()) {
-                diagnostics_.error(foreachStmt.range, "foreach currently supports only arrays with known length");
-                return false;
-            }
-
-            Type elementType = !foreachStmt.bindingType.name.empty() ? foreachStmt.bindingType : iterableType;
-            if (!elementType.arrayExtents.empty()) {
-                elementType.arrayExtents.erase(elementType.arrayExtents.begin());
-            }
-            elementType.range = foreachStmt.bindingRange;
-
-            llvm::Value* iterableAddress = emitLValue(*foreachStmt.iterable);
-            if (iterableAddress == nullptr) {
-                diagnostics_.error(foreachStmt.range, "foreach iterable must be a named array value");
-                return false;
-            }
-
-            llvm::Function* function = builder_.GetInsertBlock()->getParent();
-            const auto savedLocals = locals_;
-            llvm::AllocaInst* indexAlloca = createEntryAlloca(function, llvm::Type::getInt32Ty(context_), foreachStmt.bindingName + ".index");
-            builder_.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), 0), indexAlloca);
-
-            llvm::AllocaInst* itemAlloca = createEntryAlloca(function, lowerType(elementType), foreachStmt.bindingName);
-            locals_[foreachStmt.bindingName] = Symbol {itemAlloca, elementType, false};
-
-            llvm::BasicBlock* condBlock = llvm::BasicBlock::Create(context_, "foreach.cond", function);
-            llvm::BasicBlock* bodyBlock = llvm::BasicBlock::Create(context_, "foreach.body", function);
-            llvm::BasicBlock* stepBlock = llvm::BasicBlock::Create(context_, "foreach.step", function);
-            llvm::BasicBlock* endBlock = llvm::BasicBlock::Create(context_, "foreach.end", function);
-            branchTargets_.push_back(BranchTarget {endBlock, stepBlock, deferScopes_.size()});
-
-            builder_.CreateBr(condBlock);
-            builder_.SetInsertPoint(condBlock);
-            llvm::Value* indexValue = builder_.CreateLoad(llvm::Type::getInt32Ty(context_), indexAlloca, "foreach.idx");
-            llvm::Value* limitValue = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), *iterableType.arrayExtents.front(), false);
-            llvm::Value* condition = builder_.CreateICmpULT(indexValue, limitValue, "foreachcond");
-            builder_.CreateCondBr(condition, bodyBlock, endBlock);
-
-            builder_.SetInsertPoint(bodyBlock);
-            llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), 0);
-            llvm::Value* elementAddress = builder_.CreateInBoundsGEP(lowerType(iterableType), iterableAddress, {zero, indexValue}, foreachStmt.bindingName + ".addr");
-            llvm::Value* elementValue = builder_.CreateLoad(lowerType(elementType), elementAddress, foreachStmt.bindingName + ".value");
-            builder_.CreateStore(elementValue, itemAlloca);
-            if (!emitStmt(*foreachStmt.body, functionDecl)) {
-                branchTargets_.pop_back();
-                locals_ = savedLocals;
-                return false;
-            }
-            if (builder_.GetInsertBlock()->getTerminator() == nullptr) {
-                builder_.CreateBr(stepBlock);
-            }
-
-            builder_.SetInsertPoint(stepBlock);
-            llvm::Value* nextIndex = builder_.CreateAdd(builder_.CreateLoad(llvm::Type::getInt32Ty(context_), indexAlloca, "foreach.idx.step"),
-                                                        llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), 1),
-                                                        "foreach.next");
-            builder_.CreateStore(nextIndex, indexAlloca);
-            builder_.CreateBr(condBlock);
-
-            branchTargets_.pop_back();
-            builder_.SetInsertPoint(endBlock);
-            releaseLocals();
-            locals_ = savedLocals;
-            return true;
-        }
         case StmtKind::DoWhile: {
             const auto& doWhileStmt = static_cast<const DoWhileStmt&>(stmt);
             llvm::Function* function = builder_.GetInsertBlock()->getParent();
@@ -596,15 +443,7 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 caseBlocks.push_back(llvm::BasicBlock::Create(context_, "switch.case", function));
             }
 
-            struct RangePatternTarget {
-                std::int64_t start = 0;
-                std::int64_t end = -1;
-                llvm::BasicBlock* block = nullptr;
-                SourceRange range {};
-            };
-
             std::vector<std::pair<llvm::ConstantInt*, llvm::BasicBlock*>> exactCases;
-            std::vector<RangePatternTarget> rangeCases;
             llvm::BasicBlock* unmatchedBlock = defaultBlock;
             bool hasExplicitDefault = false;
 
@@ -617,23 +456,6 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                     continue;
                 }
                 for (const auto& pattern : switchCase.patterns) {
-                    if (pattern.isRange) {
-                        if (auto enumMembers = constantRangeMembers(*pattern.value, enumValues_); enumMembers.has_value()) {
-                            for (std::int64_t member : *enumMembers) {
-                                exactCases.emplace_back(llvm::cast<llvm::ConstantInt>(llvm::ConstantInt::get(matchedValue->getType(), member, true)),
-                                                        caseBlocks[i]);
-                            }
-                            continue;
-                        }
-                        auto bounds = constantRangeBounds(*pattern.value, enumValues_);
-                        if (!bounds.has_value()) {
-                            branchTargets_.pop_back();
-                            diagnostics_.error(pattern.range, "switch range cases must use constant ascending bounds");
-                            return false;
-                        }
-                        rangeCases.push_back(RangePatternTarget {bounds->first, bounds->second, caseBlocks[i], pattern.range});
-                        continue;
-                    }
                     llvm::Value* caseValue = emitExpr(*pattern.value);
                     auto* constantInt = llvm::dyn_cast_or_null<llvm::ConstantInt>(caseValue);
                     if (constantInt == nullptr) {
@@ -649,44 +471,9 @@ bool ModuleEmitter::emitStmt(const Stmt& stmt, const FunctionDecl& functionDecl)
                 }
             }
 
-            if (rangeCases.empty()) {
-                llvm::SwitchInst* switchInst = builder_.CreateSwitch(matchedValue, unmatchedBlock, exactCases.size());
-                for (const auto& [caseValue, block] : exactCases) {
-                    switchInst->addCase(caseValue, block);
-                }
-            } else {
-                llvm::BasicBlock* dispatchBlock = llvm::BasicBlock::Create(context_, "switch.dispatch", function);
-                builder_.CreateBr(dispatchBlock);
-                builder_.SetInsertPoint(dispatchBlock);
-
-                llvm::BasicBlock* nextDispatch = nullptr;
-                for (std::size_t i = 0; i < rangeCases.size(); ++i) {
-                    llvm::Value* lower = builder_.CreateICmpSGE(matchedValue,
-                                                                llvm::ConstantInt::get(matchedValue->getType(), rangeCases[i].start, true),
-                                                                "switch.range.lower");
-                    llvm::Value* upper = builder_.CreateICmpSLE(matchedValue,
-                                                                llvm::ConstantInt::get(matchedValue->getType(), rangeCases[i].end, true),
-                                                                "switch.range.upper");
-                    llvm::Value* inRange = builder_.CreateAnd(lower, upper, "switch.range.match");
-                    llvm::BasicBlock* fallthrough = nullptr;
-                    if (i + 1 == rangeCases.size()) {
-                        fallthrough = llvm::BasicBlock::Create(context_, "switch.exact", function);
-                    } else {
-                        nextDispatch = llvm::BasicBlock::Create(context_, "switch.range", function);
-                        fallthrough = nextDispatch;
-                    }
-                    builder_.CreateCondBr(inRange, rangeCases[i].block, fallthrough);
-                    if (i + 1 != rangeCases.size()) {
-                        builder_.SetInsertPoint(nextDispatch);
-                    } else {
-                        builder_.SetInsertPoint(fallthrough);
-                    }
-                }
-
-                llvm::SwitchInst* switchInst = builder_.CreateSwitch(matchedValue, unmatchedBlock, exactCases.size());
-                for (const auto& [caseValue, block] : exactCases) {
-                    switchInst->addCase(caseValue, block);
-                }
+            llvm::SwitchInst* switchInst = builder_.CreateSwitch(matchedValue, unmatchedBlock, exactCases.size());
+            for (const auto& [caseValue, block] : exactCases) {
+                switchInst->addCase(caseValue, block);
             }
 
             const bool exhaustiveWithoutDefault = !hasExplicitDefault && unmatchedBlock == endBlock;

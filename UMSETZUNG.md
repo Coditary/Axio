@@ -187,13 +187,11 @@ Aktuell parsebar und weitgehend semantisch/codegen-seitig unterstuetzt:
 - null-sicherer Memberzugriff `a?.b`
 - Funktionsaufrufe
 - Methodenaufrufe
-- Compile-Calls mit `$name(...)`
 - Initializer-Aufrufe fuer Typen
 - Array-Literale als AST-Form
 - Pipe-Syntax `x->f`
 - Zuweisung `=`
 - Vergleichsketten
-- Bereichsausdruecke `a..b` und `a..=b`
 
 ## Operatoren
 
@@ -203,7 +201,6 @@ Bereits implementiert im Parser, grossenteils auch in Sema und Codegen:
 - Bitweise Operatoren: `& | ^ ~ << >>`
 - Logik: `&& || !`
 - Vergleiche: `== != < <= > >=`
-- Bereichsmitgliedschaft: `in`
 - Enum-Operationen: `set`, `unset`, `toggle`, `is`, `isnot`
 - Adressoperator: `&value`
 - Dereferenzierung: `*ptr`
@@ -213,9 +210,6 @@ Beispiele:
 ```axio
 let sum int = a + b
 if x < y >= 1 {
-    return 1
-}
-if value in 1..=5 {
     return 1
 }
 ```
@@ -229,7 +223,7 @@ Bereits vorhanden:
 - `ptr?.member`
 - `ptr?.call()`
 
-Die Sema warnt bereits in einigen Faellen, wenn null-sichere oder nullable Formen auf nicht-nullable Werte angewandt werden.
+Die Sema meldet Fehler, wenn null-sichere oder nullable Formen auf nicht-nullable Werte angewandt werden.
 
 ## Structs
 
@@ -261,7 +255,6 @@ Bereits implementiert:
 - konstante Enum-Werte in Sema
 - Flag-Initialisierung ueber `EnumType{...}`
 - Enum-Mitgliedszugriff wie `Color.Green`
-- Enum-Bereiche in `in`-Ausdruecken
 
 Beispiele:
 
@@ -338,16 +331,10 @@ Bereits vorhanden:
 
 - Annotationen wie `@inline`
 - unbekannte Annotationen werden diagnostiziert
-- Compile-Funktionen mit `$...`
-- aktuell validiert:
-  - `$readfile(...)`
-  - `$generate_open_api(...)` als erkannte Form im Compilerpfad
-- Dialektbloecke wie `%%SQL{ ... }%%` werden geparsed
 
 Wichtig:
 
-- Compile-Funktionen und Dialektbloecke sind noch nicht voll ausgebaut
-- Dialektbloecke werden aktuell diagnostisch erkannt, aber noch nicht zu Runtime-Werten lowered
+- Compile-Funktionen und Dialektbloecke sind aus der Sprache entfernt
 
 ## Codegen-Stand
 
@@ -362,7 +349,7 @@ Aktuell vorhanden:
 Einschraenkungen des aktuellen Prototyps:
 
 - manche Sprachformen sind bereits parsebar oder semantisch erkannt, aber noch nicht in allen Faellen vollstaendig lowered
-- besonders Dialektbloecke und einige fortgeschrittene Meta-/Sprachfeatures sind noch nicht vollstaendig umgesetzt
+- besonders einige fortgeschrittene Sprachfeatures sind noch nicht vollstaendig umgesetzt
 
 ## Was derzeit bewusst noch unvollstaendig oder prototypisch ist
 

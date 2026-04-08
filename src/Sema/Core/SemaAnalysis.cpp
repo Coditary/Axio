@@ -54,7 +54,7 @@ ValueInfo::Ownership SemaImpl::ownershipFromInitKind(InitKind kind) const {
 }
 
 bool SemaImpl::isPointerLike(const Type& type) const {
-    return type.pointerDepth > 0 || type.name == "str" || type.name == "error" || classInfos_.contains(type.name);
+    return type.pointerDepth > 0 || type.name == "str" || classInfos_.contains(type.name);
 }
 
 bool SemaImpl::typeSupportsNullability(const Type& type) const {
@@ -427,10 +427,6 @@ bool SemaImpl::containsDeclRef(const Expr& expr, const std::string& name) const 
         }
         case ExprKind::Cast:
             return containsDeclRef(*static_cast<const CastExpr&>(expr).value, name);
-        case ExprKind::Range: {
-            const auto& range = static_cast<const RangeExpr&>(expr);
-            return containsDeclRef(*range.start, name) || containsDeclRef(*range.end, name);
-        }
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             if (containsDeclRef(*call.callee, name)) {
@@ -453,14 +449,6 @@ bool SemaImpl::containsDeclRef(const Expr& expr, const std::string& name) const 
         case ExprKind::Initializer: {
             for (const auto& value : static_cast<const InitializerExpr&>(expr).values) {
                 if (containsDeclRef(*value, name)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        case ExprKind::CompileCall: {
-            for (const auto& arg : static_cast<const CompileCallExpr&>(expr).arguments) {
-                if (containsDeclRef(*arg, name)) {
                     return true;
                 }
             }
@@ -495,12 +483,6 @@ void SemaImpl::collectRepeatedUniqueUses(const Expr& expr, std::unordered_set<st
         case ExprKind::Cast:
             collectRepeatedUniqueUses(*static_cast<const CastExpr&>(expr).value, seen, message);
             break;
-        case ExprKind::Range: {
-            const auto& range = static_cast<const RangeExpr&>(expr);
-            collectRepeatedUniqueUses(*range.start, seen, message);
-            collectRepeatedUniqueUses(*range.end, seen, message);
-            break;
-        }
         case ExprKind::Call: {
             const auto& call = static_cast<const CallExpr&>(expr);
             collectRepeatedUniqueUses(*call.callee, seen, message);
@@ -518,12 +500,6 @@ void SemaImpl::collectRepeatedUniqueUses(const Expr& expr, std::unordered_set<st
         case ExprKind::Initializer: {
             for (const auto& value : static_cast<const InitializerExpr&>(expr).values) {
                 collectRepeatedUniqueUses(*value, seen, message);
-            }
-            break;
-        }
-        case ExprKind::CompileCall: {
-            for (const auto& arg : static_cast<const CompileCallExpr&>(expr).arguments) {
-                collectRepeatedUniqueUses(*arg, seen, message);
             }
             break;
         }

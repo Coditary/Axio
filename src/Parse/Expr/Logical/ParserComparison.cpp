@@ -1,5 +1,7 @@
 #include "axc/Parse/Parser.h"
 
+#include "axc/Support/Diagnostic.h"
+
 #include "../../Internal/ParserInternal.h"
 
 namespace axc {
@@ -12,6 +14,22 @@ namespace detail {
 
 std::unique_ptr<Expr> ExpressionParser::parseComparisonChain() {
     auto first = parseBitwiseOr();
+    if (parser_.matchIdentifier("in")) {
+        const SourceRange operatorRange = parser_.previous().range;
+        auto rhs = parseBitwiseOr();
+        SourceRange end = rhs ? rhs->range : operatorRange;
+        SourceRange rangeOperator = operatorRange;
+        if (parser_.matchRangeOperator(&rangeOperator)) {
+            auto rangeEnd = parseBitwiseOr();
+            if (rangeEnd) {
+                end = rangeEnd->range;
+            } else {
+                end = rangeOperator;
+            }
+        }
+        parser_.diagnostics_.error(parser_.combine(first->range, end), "range expressions are no longer supported");
+        return std::make_unique<BoolLiteralExpr>(false, parser_.combine(first->range, end));
+    }
     std::vector<SourceRange> ranges;
     std::vector<TokenKind> ops;
     std::vector<std::unique_ptr<Expr>> exprs;
@@ -22,19 +40,6 @@ std::unique_ptr<Expr> ExpressionParser::parseComparisonChain() {
         const TokenKind op = parser_.advance().kind;
         ops.push_back(op);
         auto rhs = parseBitwiseOr();
-
-        if (op == TokenKind::KwIn) {
-            bool inclusive = false;
-            if (parser_.match(TokenKind::RangeInclusive)) {
-                inclusive = true;
-            } else {
-                parser_.expect(TokenKind::Range, "expected '..' or '..=' after 'in'");
-            }
-            auto endExpr = parseBitwiseOr();
-            const SourceRange startRange = rhs->range;
-            const SourceRange endRange = endExpr->range;
-            rhs = std::make_unique<RangeExpr>(std::move(rhs), std::move(endExpr), inclusive, parser_.combine(startRange, endRange));
-        }
 
         ranges.push_back(rhs->range);
         exprs.push_back(std::move(rhs));

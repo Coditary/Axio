@@ -67,12 +67,9 @@ AXC_TEST(Compiler_EmitsLlvmIrForImportedQualifiedStructs) {
     return true;
 }
 
-AXC_TEST(Compiler_EmbedsReadfileContentIntoLlvmIr) {
-    auto dir = axc::unit::makeTempDir("compiler_readfile");
-    const auto assetsPath = dir.path / "assets" / "banner.txt";
+AXC_TEST(Compiler_RejectsRemovedCompileFunctionExpressions) {
+    auto dir = axc::unit::makeTempDir("compiler_readfile_removed");
     const auto mainPath = dir.path / "main.ax";
-    const auto outputBase = dir.path / "embedded";
-    AXC_EXPECT(axc::unit::writeFile(assetsPath, "Axio embedded test banner.\n"));
     AXC_EXPECT(axc::unit::writeFile(mainPath,
                                     "package main\n"
                                     "extern fn puts(text str) int;\n"
@@ -81,9 +78,7 @@ AXC_TEST(Compiler_EmbedsReadfileContentIntoLlvmIr) {
                                     "    return 0\n"
                                     "}\n"));
 
-    AXC_EXPECT(axc::unit::compileToLlvmIr(mainPath, outputBase));
-    const std::string ir = axc::unit::readFile(outputBase.string() + ".ll");
-    AXC_EXPECT_CONTAINS(ir, "Axio embedded test banner.");
+    AXC_EXPECT(!axc::unit::compileCheckOnly(mainPath));
     return true;
 }
 
@@ -208,7 +203,6 @@ AXC_TEST(Compiler_RunsSwitchAndLoopControlFlow) {
     AXC_EXPECT(axc::unit::writeFile(mainPath,
                                     "package main\n"
                                     "fn main() int {\n"
-                                    "    let values int[] = {1, 2, 3}\n"
                                     "    let sum int = 0\n"
                                     "    while sum < 3 {\n"
                                     "        sum++\n"
@@ -216,18 +210,15 @@ AXC_TEST(Compiler_RunsSwitchAndLoopControlFlow) {
                                     "    for let i int = 0; i < 3; i++ {\n"
                                     "        sum += i\n"
                                     "    }\n"
-                                    "    foreach value in values {\n"
-                                    "        sum += value\n"
-                                    "    }\n"
                                     "    do {\n"
                                     "        sum--\n"
-                                    "    } while sum > 9\n"
+                                    "    } while sum > 6\n"
                                     "    switch sum {\n"
                                     "        case 0, 1 {\n"
                                     "            return 0\n"
                                     "        }\n"
-                                    "        case 9 {\n"
-                                    "            return 9\n"
+                                    "        case 5 {\n"
+                                    "            return 5\n"
                                     "        }\n"
                                     "        default {\n"
                                     "            return sum\n"
@@ -238,7 +229,7 @@ AXC_TEST(Compiler_RunsSwitchAndLoopControlFlow) {
     AXC_EXPECT(axc::unit::compileToBinary(mainPath, outputBase));
     const auto exitCode = axc::unit::runBinary(outputBase);
     AXC_EXPECT(exitCode.has_value());
-    AXC_EXPECT_EQ(*exitCode, 9);
+    AXC_EXPECT_EQ(*exitCode, 5);
     return true;
 }
 
@@ -249,7 +240,6 @@ AXC_TEST(Compiler_RunsBreakAndContinueControlFlow) {
     AXC_EXPECT(axc::unit::writeFile(mainPath,
                                     "package main\n"
                                     "fn main() int {\n"
-                                    "    let values int[] = {1, 2, 3, 4}\n"
                                     "    let sum int = 0\n"
                                     "    let i int = 0\n"
                                     "    while true {\n"
@@ -262,17 +252,8 @@ AXC_TEST(Compiler_RunsBreakAndContinueControlFlow) {
                                     "            break\n"
                                     "        }\n"
                                     "    }\n"
-                                    "    foreach value in values {\n"
-                                    "        if value == 3 {\n"
-                                    "            continue\n"
-                                    "        }\n"
-                                    "        if value == 4 {\n"
-                                    "            break\n"
-                                    "        }\n"
-                                    "        sum += value\n"
-                                    "    }\n"
                                     "    switch sum {\n"
-                                    "        case 11 {\n"
+                                    "        case 8 {\n"
                                     "            sum += 5\n"
                                     "            break\n"
                                     "        }\n"
@@ -286,7 +267,7 @@ AXC_TEST(Compiler_RunsBreakAndContinueControlFlow) {
     AXC_EXPECT(axc::unit::compileToBinary(mainPath, outputBase));
     const auto exitCode = axc::unit::runBinary(outputBase);
     AXC_EXPECT(exitCode.has_value());
-    AXC_EXPECT_EQ(*exitCode, 16);
+    AXC_EXPECT_EQ(*exitCode, 13);
     return true;
 }
 
@@ -317,10 +298,9 @@ AXC_TEST(Compiler_EmitsDeferredCallsForEachReturnPath) {
     return true;
 }
 
-AXC_TEST(Compiler_RunsSwitchRangeCases) {
-    auto dir = axc::unit::makeTempDir("compiler_switch_ranges");
+AXC_TEST(Compiler_RejectsRemovedSwitchRangeCases) {
+    auto dir = axc::unit::makeTempDir("compiler_switch_ranges_removed");
     const auto mainPath = dir.path / "main.ax";
-    const auto outputBase = dir.path / "switch_ranges";
     AXC_EXPECT(axc::unit::writeFile(mainPath,
                                     "package main\n"
                                     "enum Color() {\n"
@@ -353,10 +333,7 @@ AXC_TEST(Compiler_RunsSwitchRangeCases) {
                                     "    }\n"
                                     "}\n"));
 
-    AXC_EXPECT(axc::unit::compileToBinary(mainPath, outputBase));
-    const auto exitCode = axc::unit::runBinary(outputBase);
-    AXC_EXPECT(exitCode.has_value());
-    AXC_EXPECT_EQ(*exitCode, 15);
+    AXC_EXPECT(!axc::unit::compileCheckOnly(mainPath));
     return true;
 }
 
@@ -391,10 +368,9 @@ AXC_TEST(Compiler_EmitsDenseEnumSwitchAsLlvmSwitch) {
     return true;
 }
 
-AXC_TEST(Compiler_EmitsEnumRangeSwitchAsLlvmSwitch) {
-    auto dir = axc::unit::makeTempDir("compiler_enum_range_switch_ir");
+AXC_TEST(Compiler_RejectsRemovedEnumRangeSwitchCases) {
+    auto dir = axc::unit::makeTempDir("compiler_enum_range_switch_removed");
     const auto mainPath = dir.path / "main.ax";
-    const auto outputBase = dir.path / "enum_range_switch";
     AXC_EXPECT(axc::unit::writeFile(mainPath,
                                     "package main\n"
                                     "enum Color() {\n"
@@ -414,10 +390,7 @@ AXC_TEST(Compiler_EmitsEnumRangeSwitchAsLlvmSwitch) {
                                     "    }\n"
                                     "}\n"));
 
-    AXC_EXPECT(axc::unit::compileToLlvmIr(mainPath, outputBase));
-    const std::string ir = axc::unit::readFile(outputBase.string() + ".ll");
-    AXC_EXPECT_CONTAINS(ir, "switch i32");
-    AXC_EXPECT(!ir.empty());
+    AXC_EXPECT(!axc::unit::compileCheckOnly(mainPath));
     return true;
 }
 
@@ -588,11 +561,9 @@ AXC_TEST(Compiler_CheckOnlyAcceptsExpandedShowcaseSample) {
                                     "    return x + bias, x + bias + 1\n"
                                     "}\n"
                                     "fn main() int {\n"
-                                    "    let user = User(\"Axio\")\n"
+                                    "    let user User = new User(\"Axio\")\n"
                                     "    let left int, right int = pair{3}(4)\n"
-                                    "    if user? {\n"
-                                    "        user?.greet()\n"
-                                    "    }\n"
+                                    "    let greeting str = user.greet()\n"
                                     "    return left + right + Color.Green\n"
                                     "}\n"));
 

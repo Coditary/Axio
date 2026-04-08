@@ -29,14 +29,13 @@ AXC_TEST(Parser_ParsesPipeCallsAndCompileArguments) {
     return true;
 }
 
-AXC_TEST(Parser_ParsesComparisonChainsAndRanges) {
-    auto dir = axc::unit::makeTempDir("parser_ranges");
-    const auto path = dir.path / "ranges.ax";
+AXC_TEST(Parser_ParsesComparisonChains) {
+    auto dir = axc::unit::makeTempDir("parser_comparisons");
+    const auto path = dir.path / "comparisons.ax";
     AXC_EXPECT(axc::unit::writeFile(path,
                                     "fn main() int {\n"
                                     "    let a int = 3\n"
                                     "    if a < 5 >= 1 { return 1 }\n"
-                                    "    if a in 1..=5 { return 2 }\n"
                                     "    return 0\n"
                                     "}\n"));
 
@@ -49,11 +48,6 @@ AXC_TEST(Parser_ParsesComparisonChainsAndRanges) {
     AXC_EXPECT_EQ(firstIf.condition->kind, axc::ExprKind::Binary);
     AXC_EXPECT_EQ(static_cast<const axc::BinaryExpr&>(*firstIf.condition).op, axc::BinaryOp::LogicalAnd);
 
-    const auto& secondIf = static_cast<const axc::IfStmt&>(*mainFn->body->statements[2]);
-    const auto& membership = static_cast<const axc::BinaryExpr&>(*secondIf.condition);
-    AXC_EXPECT_EQ(membership.op, axc::BinaryOp::InRange);
-    AXC_EXPECT_EQ(membership.rhs->kind, axc::ExprKind::Range);
-    AXC_EXPECT(static_cast<const axc::RangeExpr&>(*membership.rhs).inclusive);
     return true;
 }
 

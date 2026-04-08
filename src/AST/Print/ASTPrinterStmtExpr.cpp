@@ -83,13 +83,6 @@ void ASTPrinter::printStmt(const Stmt& stmt, int level) const {
             printStmt(*forStmt.body, level + 1);
             break;
         }
-        case StmtKind::Foreach: {
-            const auto& foreachStmt = static_cast<const ForeachStmt&>(stmt);
-            out_ << "Foreach " << foreachStmt.bindingName << '\n';
-            printExpr(*foreachStmt.iterable, level + 1);
-            printStmt(*foreachStmt.body, level + 1);
-            break;
-        }
         case StmtKind::DoWhile: {
             out_ << "DoWhile\n";
             const auto& doWhileStmt = static_cast<const DoWhileStmt&>(stmt);
@@ -161,11 +154,6 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
             out_ << '\n';
             printExpr(*static_cast<const CastExpr&>(expr).value, level + 1);
             break;
-        case ExprKind::Range:
-            out_ << "Range\n";
-            printExpr(*static_cast<const RangeExpr&>(expr).start, level + 1);
-            printExpr(*static_cast<const RangeExpr&>(expr).end, level + 1);
-            break;
         case ExprKind::Call:
             out_ << "Call\n";
             printExpr(*static_cast<const CallExpr&>(expr).callee, level + 1);
@@ -202,12 +190,6 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
             for (const auto& value : static_cast<const InitializerExpr&>(expr).values) {
                 printExpr(*value, level + 1);
             }
-            break;
-        case ExprKind::CompileCall:
-            out_ << "CompileCall " << static_cast<const CompileCallExpr&>(expr).callee << '\n';
-            break;
-        case ExprKind::Dialect:
-            out_ << "Dialect " << static_cast<const DialectExpr&>(expr).dialectName << '\n';
             break;
     }
 }

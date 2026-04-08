@@ -32,12 +32,11 @@
 5. `Sema`
    - validates symbol usage before codegen
    - checks const storage rules for globals, locals, and parameters
-   - validates class/member access, ownership constraints, and nullability warnings
+   - validates class/member access, ownership constraints, and nullability rules
 
 6. `MetaPipeline`
-   - validates annotations
-   - validates compile-time embedding primitives such as `__embed_text`
-   - is the intended insertion point for AST rewriting passes
+    - validates annotations
+    - is the intended insertion point for AST rewriting passes
 
 7. `LLVMEmitter`
    - lowers AST nodes to LLVM IR

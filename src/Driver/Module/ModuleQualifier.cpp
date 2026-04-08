@@ -219,17 +219,6 @@ void ModuleQualifier::qualifyStmt(std::unique_ptr<Stmt>& stmt,
             forStmt.body.reset(static_cast<CompoundStmt*>(body.release()));
             break;
         }
-        case StmtKind::Foreach: {
-            auto& foreachStmt = static_cast<ForeachStmt&>(*stmt);
-            qualifyType(foreachStmt.bindingType, context);
-            qualifyExpr(foreachStmt.iterable, context, locals);
-            auto loopLocals = locals;
-            loopLocals.insert(foreachStmt.bindingName);
-            std::unique_ptr<Stmt> body(foreachStmt.body.release());
-            qualifyStmt(body, context, loopLocals);
-            foreachStmt.body.reset(static_cast<CompoundStmt*>(body.release()));
-            break;
-        }
         case StmtKind::DoWhile: {
             auto& doWhileStmt = static_cast<DoWhileStmt&>(*stmt);
             std::unique_ptr<Stmt> body(doWhileStmt.body.release());
@@ -283,12 +272,6 @@ void ModuleQualifier::qualifyExpr(std::unique_ptr<Expr>& expr,
             qualifyType(cast.targetType, context);
             break;
         }
-        case ExprKind::Range: {
-            auto& range = static_cast<RangeExpr&>(*expr);
-            qualifyExpr(range.start, context, locals);
-            qualifyExpr(range.end, context, locals);
-            break;
-        }
         case ExprKind::Call: {
             auto& call = static_cast<CallExpr&>(*expr);
             qualifyExpr(call.callee, context, locals);
@@ -321,20 +304,12 @@ void ModuleQualifier::qualifyExpr(std::unique_ptr<Expr>& expr,
             }
             break;
         }
-        case ExprKind::CompileCall: {
-            auto& call = static_cast<CompileCallExpr&>(*expr);
-            for (auto& arg : call.arguments) {
-                qualifyExpr(arg, context, locals);
-            }
-            break;
-        }
         case ExprKind::IntegerLiteral:
         case ExprKind::FloatLiteral:
         case ExprKind::BoolLiteral:
         case ExprKind::CharLiteral:
         case ExprKind::StringLiteral:
         case ExprKind::NullLiteral:
-        case ExprKind::Dialect:
             break;
     }
 }

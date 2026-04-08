@@ -14,7 +14,6 @@ The repository is structured so that lexer, parser, AST, metaprogramming passes,
 - Diagnostic engine with source ranges, line and column rendering, and caret markers
 - Simple metaprogramming hooks:
   - annotations such as `@inline`
-  - compile-time file embedding through `__embed_text("path")`
 - LLVM backend that emits `.ll`, `.o`, and a linked binary
 
 ## Language notes
@@ -26,19 +25,20 @@ The repository is structured so that lexer, parser, AST, metaprogramming passes,
   - `return` is optional
   - a bare `return` is allowed
 - `defer call()` runs the deferred call when the current scope exits, in LIFO order
-- `while`, `for`, `foreach`, `do { ... } while ...`, and `switch` are supported
+- `while`, `for`, `do { ... } while ...`, and `switch` are supported
 - `switch` cases do not fall through into the next case
 - reaching the end of a case body exits the `switch`; use `break` only when you want to exit early from inside nested control flow in that case
 - `break` exits the nearest loop or `switch`
 - `continue` advances the nearest loop and is rejected inside `switch`
 - for non-flag enums, a `switch` without `default` must cover every enum case
-- `switch` cases can use single values or ranges, for example `case 1..=3 {}` or `case Color.Red..=Color.Green {}`
 - enum-switch exhaustiveness diagnostics list the concrete missing enum members when they can be determined
 - overlapping constant switch cases are rejected during semantic analysis
-- switch patterns must be compile-time constants; dynamic bounds like `case 1..limit {}` are rejected
-- dense value-only switches still lower through LLVM `switch`; range-pattern switches use explicit comparisons before exact-value dispatch
+- switch patterns must be compile-time constants
+- dense value-only switches lower through LLVM `switch`
 - `fn llvm name(...) ... { ... }` lets you define a function body directly in LLVM IR
+  - the body must contain only LLVM IR, no Axio statements
   - the inline LLVM body is parsed and verified before Axio accepts it
+  - inline LLVM currently supports exactly one return value
 
 ## Build
 
@@ -118,7 +118,7 @@ See `examples/hello.ax` and `examples/assets/banner.txt`.
 - `include/axc/Sema`, `src/Sema`
   - semantic validation for symbols, const rules, ownership checks, and class/member usage
 - `include/axc/Meta`, `src/Meta`
-  - compile-time annotation and embedding validation pipeline
+  - annotation validation pipeline and future pass insertion points
 - `include/axc/Codegen`, `src/Codegen`
   - LLVM IR lowering split by declarations, expressions, statements, and module workflow
 - `include/axc/Driver`, `src/Driver`
@@ -171,11 +171,10 @@ The package interface fingerprint is derived from the exported API surface, so p
 The current codebase establishes the extension points for a multi-stage language model:
 
 1. preprocessing stage
-2. compile-time file/data extraction stage
-3. annotation-driven AST transforms
-4. LLVM IR transformation stage
+2. annotation-driven AST transforms
+3. LLVM IR transformation stage
 
-Right now the repository contains the skeleton and first working examples for stages 2 and 3. The next step is to promote those hooks into a formal plugin/pass API.
+Right now the repository contains the skeleton and first working examples for annotation validation and later pass insertion. The next step is to promote those hooks into a formal plugin/pass API.
 
 ## Performance notes
 

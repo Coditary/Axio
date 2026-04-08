@@ -11,7 +11,6 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::FloatLiteral: return "float literal";
         case TokenKind::CharLiteral: return "char literal";
         case TokenKind::StringLiteral: return "string literal";
-        case TokenKind::DialectBlock: return "dialect block";
         case TokenKind::LlvmBlock: return "llvm block";
         case TokenKind::KwFn: return "fn";
         case TokenKind::KwLet: return "let";
@@ -31,11 +30,9 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwDefault: return "default";
         case TokenKind::KwWhile: return "while";
         case TokenKind::KwFor: return "for";
-        case TokenKind::KwForeach: return "foreach";
         case TokenKind::KwDo: return "do";
         case TokenKind::KwBreak: return "break";
         case TokenKind::KwContinue: return "continue";
-        case TokenKind::KwIn: return "in";
         case TokenKind::KwAs: return "as";
         case TokenKind::KwFlags: return "Flags";
         case TokenKind::KwFlag: return "Flag";
@@ -85,7 +82,6 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Dot: return ".";
         case TokenKind::At: return "@";
         case TokenKind::Hash: return "#";
-        case TokenKind::Dollar: return "$";
         case TokenKind::Question: return "?";
         case TokenKind::QuestionDot: return "?.";
         case TokenKind::Equal: return "=";
@@ -122,8 +118,6 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::ShiftLeft: return "<<";
         case TokenKind::ShiftRight: return ">>";
         case TokenKind::Arrow: return "->";
-        case TokenKind::Range: return "..";
-        case TokenKind::RangeInclusive: return "..=";
         case TokenKind::FatArrow: return "=>";
     }
     return "token";

@@ -18,12 +18,9 @@ enum class ExprKind {
     Unary,
     Binary,
     Cast,
-    Range,
     Call,
     Member,
     Initializer,
-    CompileCall,
-    Dialect,
 };
 
 /// @brief Unary operators supported by the language surface.
@@ -66,7 +63,6 @@ enum class BinaryOp {
     Is,
     IsNot,
     Assign,
-    InRange,
 };
 
 /// @brief Base class for all expression nodes.
@@ -159,16 +155,6 @@ struct CastExpr final : Expr {
     Type targetType {};
 };
 
-/// @brief Range expression used by membership tests and switch range cases.
-struct RangeExpr final : Expr {
-    RangeExpr(std::unique_ptr<Expr> start, std::unique_ptr<Expr> end, bool inclusive, SourceRange range)
-        : Expr(ExprKind::Range, range), start(std::move(start)), end(std::move(end)), inclusive(inclusive) {}
-
-    std::unique_ptr<Expr> start;
-    std::unique_ptr<Expr> end;
-    bool inclusive = false;
-};
-
 /// @brief Function or method call expression.
 struct CallExpr final : Expr {
     CallExpr(std::unique_ptr<Expr> callee,
@@ -206,24 +192,6 @@ struct InitializerExpr final : Expr {
     std::string typeName {};
     std::vector<std::unique_ptr<Expr>> values {};
     InitKind initKind = InitKind::Value;
-};
-
-/// @brief Compile-time intrinsic or meta-function call.
-struct CompileCallExpr final : Expr {
-    CompileCallExpr(std::string callee, std::vector<std::unique_ptr<Expr>> arguments, SourceRange range)
-        : Expr(ExprKind::CompileCall, range), callee(std::move(callee)), arguments(std::move(arguments)) {}
-
-    std::string callee {};
-    std::vector<std::unique_ptr<Expr>> arguments {};
-};
-
-/// @brief Embedded foreign-language block captured as an expression.
-struct DialectExpr final : Expr {
-    DialectExpr(std::string dialectName, std::string content, SourceRange range)
-        : Expr(ExprKind::Dialect, range), dialectName(std::move(dialectName)), content(std::move(content)) {}
-
-    std::string dialectName {};
-    std::string content {};
 };
 
 }  // namespace axc

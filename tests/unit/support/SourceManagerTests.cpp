@@ -31,7 +31,6 @@ AXC_TEST(SourceManager_ReportsMissingFiles) {
 
 AXC_TEST(TokenKindName_UsesReadableSpellings) {
     AXC_EXPECT_EQ(std::string(axc::tokenKindName(axc::TokenKind::KwFn)), "fn");
-    AXC_EXPECT_EQ(std::string(axc::tokenKindName(axc::TokenKind::RangeInclusive)), "..=");
     AXC_EXPECT_EQ(std::string(axc::tokenKindName(axc::TokenKind::QuestionDot)), "?.");
     return true;
 }

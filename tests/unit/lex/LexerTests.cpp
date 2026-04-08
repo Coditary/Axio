@@ -29,7 +29,7 @@ AXC_TEST(Lexer_TokenizesOperatorsAndCompileSyntax) {
     AXC_EXPECT(axc::unit::writeFile(path,
                                     "fn main() int {\n"
                                     "    let value int = 1->inc\n"
-                                    "    if ptr?.call() && 3 in 1..=5 {\n"
+                                    "    if ptr?.call() && value > 0 {\n"
                                     "        return log{3}(value)\n"
                                     "    }\n"
                                     "    return 0\n"
@@ -40,33 +40,6 @@ AXC_TEST(Lexer_TokenizesOperatorsAndCompileSyntax) {
     AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::Arrow));
     AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::QuestionDot));
     AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::AmpAmp));
-    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::RangeInclusive));
-    AXC_EXPECT(hasTokenKind(file.tokens, axc::TokenKind::KwIn));
-    return true;
-}
-
-AXC_TEST(Lexer_SkipsCommentsAndCapturesDialectBlocks) {
-    auto dir = axc::unit::makeTempDir("lexer_dialect");
-    const auto path = dir.path / "dialect.ax";
-    AXC_EXPECT(axc::unit::writeFile(path,
-                                    "// comment\n"
-                                    "fn main() int {\n"
-                                    "    /* block */\n"
-                                    "    let sql str = %%SQL{\nSELECT 1\n}%%\n"
-                                    "    return 0\n"
-                                    "}\n"));
-
-    axc::unit::ParsedFile file;
-    AXC_EXPECT(axc::unit::lexSource(file, path));
-    bool foundDialect = false;
-    for (const auto& token : file.tokens) {
-        if (token.kind == axc::TokenKind::DialectBlock) {
-            foundDialect = true;
-            AXC_EXPECT_CONTAINS(token.lexeme, "SQL");
-            AXC_EXPECT_CONTAINS(token.lexeme, "SELECT 1");
-        }
-    }
-    AXC_EXPECT(foundDialect);
     return true;
 }
 
