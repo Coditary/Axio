@@ -1,3 +1,4 @@
+LANGUAGE_TEST=tests/language
 BUILD_DIR ?= build
 CMAKE ?= cmake
 CTEST ?= ctest
@@ -32,7 +33,7 @@ test-unit: build
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
 
 test-lit: build
-	$(LIT) tests/codegen tests/generated tests/parse tests/runtime tests/sema tests/spec
+	$(LIT) $(LANGUAGE_TEST)/codegen $(LANGUAGE_TEST)/generated $(LANGUAGE_TEST)/parse $(LANGUAGE_TEST)/runtime $(LANGUAGE_TEST)/sema $(LANGUAGE_TEST)/spec
 
 docs:
 	@if command -v doxygen >/dev/null 2>&1; then \
