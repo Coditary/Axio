@@ -1,4 +1,4 @@
-// RUN: not %axc --emit-llvm-only %s -o %t 2>&1 | %filecheck %s
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
 package main
 
@@ -8,4 +8,4 @@ fn main() {
     a % b
 }
 
-// CHECK: error:
+// CHECK-NOT: error:

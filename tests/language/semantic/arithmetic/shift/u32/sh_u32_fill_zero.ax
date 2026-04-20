@@ -1,4 +1,4 @@
-// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
 package main
 
@@ -6,3 +6,5 @@ fn main() {
     let value u32 = 128
     value >> 1
 }
+
+// CHECK-NOT: error:

@@ -1,4 +1,4 @@
-// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: %axc --check-only %s 2>&1 | %filecheck %s
 
 package main
 
@@ -7,3 +7,5 @@ fn main() {
     let b u64 = 4
     a % b
 }
+
+// CHECK-NOT: error:

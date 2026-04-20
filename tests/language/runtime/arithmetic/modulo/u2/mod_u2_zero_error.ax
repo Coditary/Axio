@@ -1,0 +1,11 @@
+// RUN: not %axc --emit-llvm-only %s -o %t 2>&1 | %filecheck %s
+
+package main
+
+fn main() {
+    let a u2 = 9
+    let b u2 = 0
+    a % b
+}
+
+// CHECK: error:

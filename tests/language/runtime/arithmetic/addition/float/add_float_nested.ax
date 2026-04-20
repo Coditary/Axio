@@ -1,0 +1,10 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+
+package main
+
+fn main() {
+    let a float = 1.0
+    let b float = 2.0
+    let c float = 3.0
+    a + (b + c)
+}

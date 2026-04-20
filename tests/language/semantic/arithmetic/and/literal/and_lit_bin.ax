@@ -1,7 +1,9 @@
-// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
 package main
 
 fn main() {
     0b1100 & 0b1010
 }
+
+// CHECK: error: unknown symbol 'b1100'

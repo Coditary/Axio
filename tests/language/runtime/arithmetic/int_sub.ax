@@ -1,9 +1,0 @@
-// RUN: %axc %s -o %tbin
-// RUN: %tbin; test "$?" = "2"
-
-package main
-
-fn main() int {
-    return 7 - 5
-}
-

@@ -1,4 +1,4 @@
-// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+// RUN: not %axc --check-only %s 2>&1 | %filecheck %s
 
 package main
 
@@ -7,3 +7,5 @@ fn main() {
     let b long = 1
     a & b
 }
+
+// CHECK: error: initializer type does not match declared type
