@@ -1,0 +1,22 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value byte = 1
+    ++value
+    value--
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:byte
+// CHECK-NEXT:       Int 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PreIncrement
+// CHECK-NEXT:         Ref value
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostDecrement
+// CHECK-NEXT:         Ref value

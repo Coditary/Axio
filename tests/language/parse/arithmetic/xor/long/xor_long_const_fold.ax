@@ -1,0 +1,16 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    6 ^ 3
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary BitXor
+// CHECK-NEXT:         Int 6
+// CHECK-NEXT:         Int 3

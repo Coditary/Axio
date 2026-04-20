@@ -1,0 +1,18 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value ulong = 1
+    value--
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:ulong
+// CHECK-NEXT:       Int 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostDecrement
+// CHECK-NEXT:         Ref value

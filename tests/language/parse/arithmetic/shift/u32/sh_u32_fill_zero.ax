@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value u32 = 128
+    value >> 1
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:u32
+// CHECK-NEXT:       Int 128
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary ShiftRight
+// CHECK-NEXT:         Ref value
+// CHECK-NEXT:         Int 1

@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value int = -2147483648
+    value--
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:int
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Int 2147483648
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostDecrement
+// CHECK-NEXT:         Ref value

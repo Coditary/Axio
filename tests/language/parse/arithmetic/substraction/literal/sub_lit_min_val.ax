@@ -1,0 +1,17 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    -2147483648 - 1
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Unary Negate
+// CHECK-NEXT:           Int 2147483648
+// CHECK-NEXT:         Int 1

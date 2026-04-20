@@ -1,0 +1,22 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a bool = 0
+    let b bool = 1
+    a - b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:bool
+// CHECK-NEXT:       Int 0
+// CHECK-NEXT:     Let b:bool
+// CHECK-NEXT:       Int 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

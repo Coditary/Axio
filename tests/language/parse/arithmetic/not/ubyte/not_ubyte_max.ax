@@ -1,0 +1,18 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value ubyte = 255
+    ~value
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:ubyte
+// CHECK-NEXT:       Int 255
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary BitwiseNot
+// CHECK-NEXT:         Ref value

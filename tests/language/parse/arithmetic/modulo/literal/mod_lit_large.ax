@@ -1,0 +1,16 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    1000000 % 97
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Mod
+// CHECK-NEXT:         Int 1000000
+// CHECK-NEXT:         Int 97

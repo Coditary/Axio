@@ -1,0 +1,22 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a f8 = 9.5
+    let b f8 = 4.0
+    a % b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:f8
+// CHECK-NEXT:       Float 9.5
+// CHECK-NEXT:     Let b:f8
+// CHECK-NEXT:       Float 4
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Mod
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

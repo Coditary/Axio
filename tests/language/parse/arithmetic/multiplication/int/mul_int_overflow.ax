@@ -1,0 +1,22 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a int = 2147483647
+    let b int = 2
+    a * b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:int
+// CHECK-NEXT:       Int 2147483647
+// CHECK-NEXT:     Let b:int
+// CHECK-NEXT:       Int 2
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Mul
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

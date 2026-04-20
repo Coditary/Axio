@@ -1,0 +1,24 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a f32 = -3.4028235e38
+    let b f32 = -1.0
+    a / b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:f32
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Float 3.40282e+38
+// CHECK-NEXT:     Let b:f32
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Float 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Div
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

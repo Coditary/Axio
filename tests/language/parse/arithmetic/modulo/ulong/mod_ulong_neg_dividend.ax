@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a ulong = -9
+    let b ulong = 4
+    a % b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:ulong
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Int 9
+// CHECK-NEXT:     Let b:ulong
+// CHECK-NEXT:       Int 4
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Mod
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let b f32 = 1.0
+    3.0 - b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let b:f32
+// CHECK-NEXT:       Float 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Float 3
+// CHECK-NEXT:         Ref b

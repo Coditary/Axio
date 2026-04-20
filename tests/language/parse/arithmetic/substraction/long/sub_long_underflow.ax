@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a long = -9223372036854775808
+    let b long = 1
+    a - b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:long
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Int 9223372036854775807
+// CHECK-NEXT:     Let b:long
+// CHECK-NEXT:       Int 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

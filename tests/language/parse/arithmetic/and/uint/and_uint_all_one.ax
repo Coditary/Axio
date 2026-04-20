@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value uint = 6
+    value & 4294967295
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:uint
+// CHECK-NEXT:       Int 6
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary BitAnd
+// CHECK-NEXT:         Ref value
+// CHECK-NEXT:         Int 4294967295

@@ -1,0 +1,22 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a uint = 10
+    let b uint = 8
+    a % b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:uint
+// CHECK-NEXT:       Int 10
+// CHECK-NEXT:     Let b:uint
+// CHECK-NEXT:       Int 8
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Mod
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

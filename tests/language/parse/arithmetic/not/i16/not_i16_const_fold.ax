@@ -1,0 +1,15 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    ~6
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary BitwiseNot
+// CHECK-NEXT:         Int 6

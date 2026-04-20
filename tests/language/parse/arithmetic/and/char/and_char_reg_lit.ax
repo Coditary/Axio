@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a char = 7
+    a & 1
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:char
+// CHECK-NEXT:       Int 7
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary BitAnd
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Int 1

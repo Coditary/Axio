@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value f8 = -240.0
+    value--
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:f8
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Float 240
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostDecrement
+// CHECK-NEXT:         Ref value

@@ -1,0 +1,16 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    7.5 / 2.5
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Div
+// CHECK-NEXT:         Float 7.5
+// CHECK-NEXT:         Float 2.5

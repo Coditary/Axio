@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a short = -32768
+    let b short = 1
+    a - b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:short
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Int 32768
+// CHECK-NEXT:     Let b:short
+// CHECK-NEXT:       Int 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

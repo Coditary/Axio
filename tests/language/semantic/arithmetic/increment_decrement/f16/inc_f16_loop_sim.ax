@@ -1,0 +1,10 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+
+package main
+
+fn main() {
+    let value f16 = 0.0
+    for let i int = 0; i < 3; i++ {
+        value++
+    }
+}

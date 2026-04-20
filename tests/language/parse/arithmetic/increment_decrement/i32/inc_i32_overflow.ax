@@ -1,0 +1,18 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value i32 = 2147483647
+    value++
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:i32
+// CHECK-NEXT:       Int 2147483647
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostIncrement
+// CHECK-NEXT:         Ref value

@@ -1,0 +1,18 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value u2 = 3
+    value++
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:u2
+// CHECK-NEXT:       Int 3
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostIncrement
+// CHECK-NEXT:         Ref value

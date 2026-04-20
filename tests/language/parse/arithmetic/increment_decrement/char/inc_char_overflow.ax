@@ -1,0 +1,18 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value char = 127
+    value++
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:char
+// CHECK-NEXT:       Int 127
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostIncrement
+// CHECK-NEXT:         Ref value

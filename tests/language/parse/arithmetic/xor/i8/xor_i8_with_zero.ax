@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value i8 = 6
+    value ^ 0
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:i8
+// CHECK-NEXT:       Int 6
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary BitXor
+// CHECK-NEXT:         Ref value
+// CHECK-NEXT:         Int 0

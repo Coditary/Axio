@@ -1,0 +1,9 @@
+// RUN: not %axc --emit-llvm-only %s -o %t 2>&1 | %filecheck %s
+
+package main
+
+fn main() {
+    8 / 0
+}
+
+// CHECK: error:

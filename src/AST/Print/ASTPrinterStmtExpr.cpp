@@ -2,6 +2,80 @@
 
 namespace axc {
 
+namespace {
+
+const char* unaryOpName(UnaryOp op) {
+    switch (op) {
+        case UnaryOp::Negate:
+            return "Negate";
+        case UnaryOp::AddressOf:
+            return "AddressOf";
+        case UnaryOp::Dereference:
+            return "Dereference";
+        case UnaryOp::LogicalNot:
+            return "LogicalNot";
+        case UnaryOp::BitwiseNot:
+            return "BitwiseNot";
+        case UnaryOp::PreIncrement:
+            return "PreIncrement";
+        case UnaryOp::PreDecrement:
+            return "PreDecrement";
+        case UnaryOp::PostIncrement:
+            return "PostIncrement";
+        case UnaryOp::PostDecrement:
+            return "PostDecrement";
+    }
+
+    return "Unknown";
+}
+
+const char* binaryOpName(BinaryOp op) {
+    switch (op) {
+        case BinaryOp::Add:
+            return "Add";
+        case BinaryOp::Sub:
+            return "Sub";
+        case BinaryOp::Mul:
+            return "Mul";
+        case BinaryOp::Div:
+            return "Div";
+        case BinaryOp::Mod:
+            return "Mod";
+        case BinaryOp::BitAnd:
+            return "BitAnd";
+        case BinaryOp::BitOr:
+            return "BitOr";
+        case BinaryOp::BitXor:
+            return "BitXor";
+        case BinaryOp::ShiftLeft:
+            return "ShiftLeft";
+        case BinaryOp::ShiftRight:
+            return "ShiftRight";
+        case BinaryOp::Equal:
+            return "Equal";
+        case BinaryOp::NotEqual:
+            return "NotEqual";
+        case BinaryOp::Less:
+            return "Less";
+        case BinaryOp::LessEqual:
+            return "LessEqual";
+        case BinaryOp::Greater:
+            return "Greater";
+        case BinaryOp::GreaterEqual:
+            return "GreaterEqual";
+        case BinaryOp::LogicalAnd:
+            return "LogicalAnd";
+        case BinaryOp::LogicalOr:
+            return "LogicalOr";
+        case BinaryOp::Assign:
+            return "Assign";
+    }
+
+    return "Unknown";
+}
+
+}  // namespace
+
 void ASTPrinter::printStmt(const Stmt& stmt, int level) const {
     indent(level);
     switch (stmt.kind) {
@@ -137,11 +211,11 @@ void ASTPrinter::printExpr(const Expr& expr, int level) const {
             out_ << "Ref " << static_cast<const DeclRefExpr&>(expr).name << '\n';
             break;
         case ExprKind::Unary:
-            out_ << "Unary\n";
+            out_ << "Unary " << unaryOpName(static_cast<const UnaryExpr&>(expr).op) << '\n';
             printExpr(*static_cast<const UnaryExpr&>(expr).operand, level + 1);
             break;
         case ExprKind::Binary:
-            out_ << "Binary\n";
+            out_ << "Binary " << binaryOpName(static_cast<const BinaryExpr&>(expr).op) << '\n';
             printExpr(*static_cast<const BinaryExpr&>(expr).lhs, level + 1);
             printExpr(*static_cast<const BinaryExpr&>(expr).rhs, level + 1);
             break;

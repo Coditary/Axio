@@ -1,0 +1,20 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    0xff ^ 0x0f
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Int 0
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary BitXor
+// CHECK-NEXT:         Ref xff
+// CHECK-NEXT:         Int 0
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Ref x0f

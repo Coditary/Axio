@@ -1,0 +1,23 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a f64 = -1.7976931348623157e308
+    let b f64 = 1.0
+    a - b
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:f64
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Float 1.79769e+308
+// CHECK-NEXT:     Let b:f64
+// CHECK-NEXT:       Float 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Ref a
+// CHECK-NEXT:         Ref b

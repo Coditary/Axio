@@ -1,0 +1,27 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let a i32 = 5
+    let b i32 = 3
+    let c i32 = 1
+    a - b - c
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let a:i32
+// CHECK-NEXT:       Int 5
+// CHECK-NEXT:     Let b:i32
+// CHECK-NEXT:       Int 3
+// CHECK-NEXT:     Let c:i32
+// CHECK-NEXT:       Int 1
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary Sub
+// CHECK-NEXT:         Binary Sub
+// CHECK-NEXT:           Ref a
+// CHECK-NEXT:           Ref b
+// CHECK-NEXT:         Ref c

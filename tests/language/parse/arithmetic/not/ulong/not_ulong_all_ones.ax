@@ -1,0 +1,18 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value ulong = 18446744073709551615
+    ~value
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:ulong
+// CHECK-NEXT:       Int 9223372036854775807
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary BitwiseNot
+// CHECK-NEXT:         Ref value

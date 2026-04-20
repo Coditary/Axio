@@ -1,0 +1,20 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value int = 6
+    value & -1
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:int
+// CHECK-NEXT:       Int 6
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Binary BitAnd
+// CHECK-NEXT:         Ref value
+// CHECK-NEXT:         Unary Negate
+// CHECK-NEXT:           Int 1

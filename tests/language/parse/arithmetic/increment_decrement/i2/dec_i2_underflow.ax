@@ -1,0 +1,19 @@
+// RUN: %axc --dump-ast %s | %filecheck %s
+
+package main
+
+fn main() {
+    let value i2 = -2
+    value--
+}
+
+
+// CHECK: Function main
+// CHECK-NEXT:   Returns void
+// CHECK-NEXT:   Block
+// CHECK-NEXT:     Let value:i2
+// CHECK-NEXT:       Unary Negate
+// CHECK-NEXT:         Int 2
+// CHECK-NEXT:     ExprStmt
+// CHECK-NEXT:       Unary PostDecrement
+// CHECK-NEXT:         Ref value
