@@ -1,0 +1,8 @@
+package main
+
+fn main() {
+    i int = 0
+    j int = -1
+    i + j
+}
+

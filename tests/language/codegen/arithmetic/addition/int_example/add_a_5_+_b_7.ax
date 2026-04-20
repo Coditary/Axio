@@ -1,0 +1,7 @@
+package main
+
+fn main() {
+    a int = 5
+    b int = 7
+    a + b
+}
