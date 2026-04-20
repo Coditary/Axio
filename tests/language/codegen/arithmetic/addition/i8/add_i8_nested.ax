@@ -1,0 +1,10 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+
+package main
+
+fn main() {
+    let a i8 = 1
+    let b i8 = 2
+    let c i8 = 3
+    a + (b + c)
+}

@@ -1,0 +1,8 @@
+// RUN: %axc --emit-llvm-only %s -o %t 2>/dev/null
+
+package main
+
+fn main() {
+    let value byte = 127
+    value++
+}

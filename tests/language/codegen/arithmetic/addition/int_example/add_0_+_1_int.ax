@@ -1,7 +1,0 @@
-package main
-
-fn main() {
-    i int = 1
-    0 + i
-}
-
